@@ -35,7 +35,7 @@ export function TestFindingsPage() {
               <Sparkles className="h-4 w-4 text-accent" aria-hidden /> UX Director
             </div>
             <p className="mt-1 text-sm text-ink-muted">
-              Analyzes your finished attempts with the AgenticOrg UX Director. A person approves the draft in AgenticOrg before it can be published.
+              The UX Director (First Five) analyzes each finished attempt, then scores every finding and recommendation. Anything below the confidence bar is left out; you publish when you're ready.
             </p>
             <Button className="mt-3" variant="secondary" loading={analyze.isPending} onClick={() => analyze.mutate()}>
               Run analysis

@@ -17,7 +17,7 @@ interface PublicReport {
   metricsSnapshot: StudyMetrics;
   snapshotAt: string;
   publishedAt: string | null;
-  source: "owner" | "agenticorg";
+  source: "owner" | "ux_director" | "agenticorg";
   findings: Omit<ViewFinding, "footer">[];
 }
 
@@ -42,7 +42,7 @@ export function PublishedReportPage() {
             goalType={q.data.goalType}
             goalTarget={q.data.goalTarget}
             metrics={q.data.metricsSnapshot}
-            meta={`Published ${formatDate(q.data.publishedAt)} · Numbers as of ${formatDate(q.data.snapshotAt)} · ${q.data.source === "owner" ? "Written and approved by the website owner" : "Drafted by the UX Director and approved by a human reviewer"}`}
+            meta={`Published ${formatDate(q.data.publishedAt)} · Numbers as of ${formatDate(q.data.snapshotAt)} · ${q.data.source === "owner" ? "Written and approved by the website owner" : "Findings by the UX Director (First Five), scored automatically, shared by the project owner"}`}
             summary={q.data.summary}
             findings={q.data.findings}
           />

@@ -1,8 +1,8 @@
 import { EVIDENCE_STRENGTHS, EVIDENCE_STRENGTH_LABELS, GOAL_TYPE_SHORT, type FindingDto, type FindingInput, type ReportDetail, type SessionListItem } from "@firstfive/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ExternalLink, Pencil, Plus, RefreshCw, RotateCcw, Send, ShieldCheck, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, ExternalLink, Gauge, Loader2, Pencil, Plus, RefreshCw, RotateCcw, Send, ShieldCheck, Trash2, XCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { FindingCard, MetricsSummary } from "../../components/ReportView";
 import { ReportBadge } from "../../components/status";
 import { Alert, Button, Card, CardHeader, CopyButton, ErrorState, Field, Input, Select, Spinner, Textarea } from "../../components/ui";
@@ -24,14 +24,8 @@ export function ReportDetailPage() {
   const q = useQuery({
     queryKey: ["report", id],
     queryFn: () => api<ReportDetail>(`/api/reports/${id}`),
-    // UX Director runs finish in the background; AgenticOrg approvals arrive through the sync.
-    refetchInterval: (query) => {
-      const r = query.state.data;
-      if (!r) return false;
-      if (r.status === "processing") return 5000;
-      if (r.status === "awaiting_review" && r.approvalPolicy.channel === "agenticorg") return 30000;
-      return false;
-    },
+    // UX Director runs finish in the background; poll until the scored report is ready.
+    refetchInterval: (query) => (query.state.data?.status === "processing" ? 5000 : false),
   });
   const [editing, setEditing] = useState<FindingDto | "new" | null>(null);
   const [note, setNote] = useState("");
@@ -64,12 +58,17 @@ export function ReportDetailPage() {
           <ReportBadge status={r.status} />
         </div>
         <p className="mt-2 text-sm text-ink-muted">
-          {r.source === "owner" ? "Written by you" : "Drafted by the UX Director"} · Revision {r.revision} · Task: {r.task} · {GOAL_TYPE_SHORT[r.goalType]}:{" "}
+          {SOURCE_LABELS[r.source]}
+          {r.source === "owner" && ` · Revision ${r.revision}`} · Task: {r.task} · {GOAL_TYPE_SHORT[r.goalType]}:{" "}
           <span className="font-mono">{r.goalTarget}</span>
         </p>
       </div>
 
-      <ReviewPanel r={r} note={note} setNote={setNote} run={(path, body) => action.mutate({ path, body })} pending={action.isPending} />
+      {r.source === "owner" ? (
+        <ReviewPanel r={r} note={note} setNote={setNote} run={(path, body) => action.mutate({ path, body })} pending={action.isPending} />
+      ) : (
+        <PublishPanel r={r} run={(path) => action.mutate({ path })} pending={action.isPending} />
+      )}
       {action.error && <Alert tone="danger">{errorMessage(action.error)}</Alert>}
 
       {editable && <SummaryEditor r={r} onSaved={setReport} />}
@@ -102,7 +101,13 @@ export function ReportDetailPage() {
           {editing === "new" && <FindingEditor report={r} onDone={(nr) => (nr && setReport(nr), setEditing(null))} />}
           {r.findings.length === 0 && editing !== "new" && (
             <Card className="p-6 text-sm text-ink-muted">
-              No findings yet. Add what you observed, link the sessions that support it, and quote what participants said.
+              {r.source === "owner"
+                ? "No findings yet. Add what you observed, link the sessions that support it, and quote what participants said."
+                : r.legacy
+                  ? "This legacy report has no findings."
+                  : r.status === "processing"
+                  ? "Findings appear here when the analysis finishes."
+                  : "No finding met the confidence bar for this analysis."}
             </Card>
           )}
           {r.findings.map((f, i) =>
@@ -118,6 +123,7 @@ export function ReportDetailPage() {
                   counterCount: f.counterSessions.length,
                   footer: (
                     <div className="flex flex-wrap items-center justify-between gap-3">
+                      {f.confidenceScore != null && <ScoreLine f={f} />}
                       <div className="text-sm text-ink-muted">
                         {f.supportingSessions.length > 0 && (
                           <>
@@ -182,6 +188,106 @@ export function ReportDetailPage() {
   );
 }
 
+const SOURCE_LABELS: Record<ReportDetail["source"], string> = {
+  owner: "Written by you",
+  ux_director: "UX Director (First Five) · scored automatically",
+  agenticorg: "Legacy AgenticOrg report",
+};
+
+function ScoreLine({ f }: { f: FindingDto }) {
+  return (
+    <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+      <span className="inline-flex items-center gap-1.5 font-medium">
+        <Gauge className="h-4 w-4 text-accent" aria-hidden /> Finding confidence {f.confidenceScore}/100
+      </span>
+      <span className="text-ink-muted">
+        {f.recommendationScore != null ? `Recommendation confidence ${f.recommendationScore}/100` : "Recommendation didn't meet the confidence bar"}
+      </span>
+    </div>
+  );
+}
+
+/** UX Director reports: no review step. Ready → owner publishes; stale and legacy states. */
+function PublishPanel({ r, run, pending }: { r: ReportDetail; run: (path: string) => void; pending: boolean }) {
+  const navigate = useNavigate();
+  const rerun = useMutation({
+    mutationFn: () => post<ReportDetail>(`/api/studies/${r.studyId}/analyze`, {}),
+    onSuccess: (nr) => navigate(`/app/reports/${nr.id}`),
+  });
+  const dropped = [
+    r.droppedFindings ? `${r.droppedFindings} finding${r.droppedFindings === 1 ? "" : "s"}` : null,
+    r.droppedRecommendations ? `${r.droppedRecommendations} recommendation${r.droppedRecommendations === 1 ? "" : "s"}` : null,
+  ].filter(Boolean);
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="flex items-start gap-3">
+        <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">Publishing</div>
+          <p className="mt-1 text-sm text-ink-muted">{r.approvalPolicy.description}</p>
+
+          {r.legacy && (
+            <Alert tone="info" className="mt-4">
+              This report came from the retired AgenticOrg integration. You can still read it, but it can't be published. Run a new analysis from Findings.
+            </Alert>
+          )}
+          {r.status === "processing" && (
+            <p className="mt-4 flex items-center gap-2 text-sm text-ink-muted">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> The UX Director is analysing each attempt, then scoring every finding. This page updates on its own.
+            </p>
+          )}
+          {r.status === "failed" && (
+            <Alert tone="danger" className="mt-4">
+              The analysis didn't produce a report{r.failureReason ? `: ${r.failureReason.replace(/[.\s]*$/, "")}.` : "."} Nothing was stored.
+            </Alert>
+          )}
+          {!r.legacy && (r.status === "ready" || r.status === "published") && dropped.length > 0 && (
+            <p className="mt-4 text-sm text-ink-muted">{dropped.join(" and ")} didn't meet the confidence bar and {dropped.length > 1 || r.droppedFindings + r.droppedRecommendations > 1 ? "were" : "was"} left out.</p>
+          )}
+          {!r.legacy && r.status === "ready" && (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              {r.findings.length > 0 ? (
+                <Button loading={pending} onClick={() => run("publish")}>
+                  Publish report
+                </Button>
+              ) : (
+                <span className="text-sm text-ink-muted">No finding met the confidence bar, so there's nothing to publish.</span>
+              )}
+            </div>
+          )}
+          {r.status === "published" && r.shareUrl && (
+            <div className="mt-4 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="min-w-0 flex-1 break-all rounded-lg border border-line bg-canvas px-3 py-2 font-mono text-[13px]">{r.shareUrl}</code>
+                <CopyButton text={r.shareUrl} label="Copy link" />
+                <a href={r.shareUrl} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline">
+                  Open <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                </a>
+              </div>
+              <Button size="sm" variant="ghost" disabled={pending} onClick={() => run("unpublish")}>
+                Unpublish
+              </Button>
+            </div>
+          )}
+          {(r.legacy || r.status === "failed" || ((r.status === "ready" || r.status === "published") && r.staleBy > 0)) && (
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+              {!r.legacy && r.status !== "failed" && r.staleBy > 0 && (
+                <span className="text-ink-muted">
+                  Out of date by {r.staleBy} attempt{r.staleBy === 1 ? "" : "s"}
+                </span>
+              )}
+              <Button size="sm" variant="secondary" icon={RefreshCw} loading={rerun.isPending} onClick={() => rerun.mutate()}>
+                Run analysis again
+              </Button>
+              {rerun.error && <span className="text-ink-muted">{errorMessage(rerun.error)}</span>}
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 const DECISION_LABELS: Record<string, string> = {
   requested: "Review requested",
   approved: "Approved",
@@ -224,11 +330,6 @@ function ReviewPanel({ r, note, setNote, run, pending }: { r: ReportDetail; note
                 </Button>
               </div>
             </div>
-          )}
-          {r.status === "awaiting_review" && r.approvalPolicy.channel === "agenticorg" && (
-            <Alert tone="info" className="mt-4">
-              Waiting for approval in AgenticOrg{r.externalRunId ? ` (run ${r.externalRunId})` : ""}. Approve or reject it in AgenticOrg's Approvals page; this page updates on its own.
-            </Alert>
           )}
           {r.status === "failed" && (
             <Alert tone="danger" className="mt-4">

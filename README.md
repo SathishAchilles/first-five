@@ -12,7 +12,7 @@ This repository is the **Render-hosted application and backend**. The browser tr
 | Architecture | [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) |
 | Application API | [docs/api/API.md](docs/api/API.md) |
 | SDK contract (for the SDK team) | [docs/integrations/SDK_INTEGRATION.md](docs/integrations/SDK_INTEGRATION.md) · [OpenAPI](docs/api/sdk-openapi.yaml) |
-| Integrations | [PostHog](docs/integrations/POSTHOG_SETUP.md) · [AgenticOrg](docs/integrations/AGENTICORG_SETUP.md) · [Pine Labs](docs/integrations/PINELABS_SETUP.md) |
+| Integrations | [PostHog](docs/integrations/POSTHOG_SETUP.md) · [UX Director](docs/integrations/UX_DIRECTOR.md) · [Pine Labs](docs/integrations/PINELABS_SETUP.md) |
 | Deployment | [docs/deployment/RENDER.md](docs/deployment/RENDER.md) |
 | Status | [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) · [LANDING_PAGE_IMPLEMENTATION_STATUS.md](LANDING_PAGE_IMPLEMENTATION_STATUS.md) · [INTEGRATION_CHECKLIST.md](INTEGRATION_CHECKLIST.md) |
 | Landing design reference | [references/landing/](references/landing/) |
@@ -80,4 +80,4 @@ The contract tests and the e2e participant flow use **simulated SDK requests** (
 - No fake activity, sessions, feedback, AI findings, payments or "Connected" states.
 - Numbers are deterministic (PostgreSQL), with numerators and denominators; empty denominators show "—".
 - The sample report is labeled **Example report — illustrative data**.
-- PostHog, AgenticOrg and Pine Labs show **Not configured** until a real verification passes.
+- PostHog, the UX Director and Pine Labs show **Not configured** until a real verification passes.

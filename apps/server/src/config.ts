@@ -5,6 +5,7 @@ const bool = z
   .optional()
   .transform((v) => v === "true" || v === "1");
 const int = (def: number) => z.coerce.number().int().positive().default(def);
+const score = (def: number) => z.coerce.number().int().min(0).max(100).default(def);
 const optionalString = z
   .string()
   .optional()
@@ -74,19 +75,22 @@ const EnvSchema = z.object({
   POSTHOG_PERSONAL_API_KEY: optionalString,
   POSTHOG_PROJECT_ID: optionalString,
 
-  // AgenticOrg UX Director. Agents are run by stored agent ID (execution-scoped key).
-  AGENTICORG_BASE_URL: optionalString,
-  AGENTICORG_API_KEY: optionalString,
-  /** Stored agent that writes the contextual interview question (Q2). */
-  AGENTICORG_Q2_AGENT_ID: optionalString,
-  /** Stored agent that drafts the research report; every run queues an AgenticOrg HITL approval. */
-  AGENTICORG_REPORT_AGENT_ID: optionalString,
-  /** Key allowed to read approvals (approvals:read). Without it, decisions can't be confirmed and publishing stays blocked. */
-  AGENTICORG_APPROVALS_API_KEY: optionalString,
-  AGENTICORG_Q2_TIMEOUT_MS: int(8000),
-  AGENTICORG_REPORT_TIMEOUT_MS: int(150_000),
-  AGENTICORG_WORKFLOW_ID: optionalString,
-  AGENTICORG_WEBHOOK_SECRET: optionalString,
+  // UX Director (in house): Claude models via the Anthropic API, or Gemini as an alternative.
+  UX_DIRECTOR_PROVIDER: z.enum(["anthropic", "gemini"]).default("anthropic"),
+  ANTHROPIC_API_KEY: optionalString,
+  GEMINI_API_KEY: optionalString,
+  /** Per-step models; unset means the provider's default (see UX_DIRECTOR_DEFAULT_MODEL). */
+  UX_DIRECTOR_MODEL_Q2: optionalString,
+  UX_DIRECTOR_MODEL_MAP: optionalString,
+  UX_DIRECTOR_MODEL_REDUCE: optionalString,
+  UX_DIRECTOR_MODEL_SCORE: optionalString,
+  /** How long the interview waits for a contextual question before showing the fallback. */
+  UX_DIRECTOR_Q2_TIMEOUT_MS: int(8000),
+  /** An analysis that hasn't finished within this budget fails with a re-run message. */
+  UX_DIRECTOR_RUN_BUDGET_MS: int(600_000),
+  /** Findings / recommendations scoring below these (0–100) are dropped. */
+  UX_DIRECTOR_FINDING_THRESHOLD: score(60),
+  UX_DIRECTOR_RECOMMENDATION_THRESHOLD: score(60),
 
   // Pine Labs (future integration).
   PINELABS_ENV: z.enum(["uat", "live"]).default("uat"),
@@ -97,7 +101,14 @@ const EnvSchema = z.object({
   PINELABS_WEBHOOK_SECRET: optionalString,
 });
 
-export type Env = z.infer<typeof EnvSchema>;
+/** Claude defaults to Sonnet for every step (half Opus's price); set UX_DIRECTOR_MODEL_* to move a step to Opus or Haiku. */
+export const UX_DIRECTOR_DEFAULT_MODEL = { anthropic: "claude-sonnet-5-5", gemini: "gemini-3.8-flash" } as const;
+/** Gemini scoring defaults to Pro: the rubric judgments are the quality gate, and Pro is the stronger judge. */
+export const UX_DIRECTOR_DEFAULT_SCORE_MODEL = { anthropic: "claude-sonnet-5-5", gemini: "gemini-3.1-pro-preview" } as const;
+
+type UxDirectorModelKey = "UX_DIRECTOR_MODEL_Q2" | "UX_DIRECTOR_MODEL_MAP" | "UX_DIRECTOR_MODEL_REDUCE" | "UX_DIRECTOR_MODEL_SCORE";
+
+export type Env = Omit<z.infer<typeof EnvSchema>, UxDirectorModelKey> & Record<UxDirectorModelKey, string>;
 
 export interface AppConfig extends Env {
   appUrl: string;
@@ -114,7 +125,14 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     const issues = parsed.error.issues.map((i) => `  • ${i.path.join(".")}: ${i.message}`).join("\n");
     throw new Error(`Invalid environment configuration:\n${issues}`);
   }
-  const env = parsed.data;
+  const defaultModel = UX_DIRECTOR_DEFAULT_MODEL[parsed.data.UX_DIRECTOR_PROVIDER];
+  const env: Env = {
+    ...parsed.data,
+    UX_DIRECTOR_MODEL_Q2: parsed.data.UX_DIRECTOR_MODEL_Q2 ?? defaultModel,
+    UX_DIRECTOR_MODEL_MAP: parsed.data.UX_DIRECTOR_MODEL_MAP ?? defaultModel,
+    UX_DIRECTOR_MODEL_REDUCE: parsed.data.UX_DIRECTOR_MODEL_REDUCE ?? defaultModel,
+    UX_DIRECTOR_MODEL_SCORE: parsed.data.UX_DIRECTOR_MODEL_SCORE ?? UX_DIRECTOR_DEFAULT_SCORE_MODEL[parsed.data.UX_DIRECTOR_PROVIDER],
+  };
   // the Render env group names the PostHog project token POSTHOG_PROJECT_TOKEN
   if (!env.POSTHOG_PROJECT_API_KEY && source.POSTHOG_PROJECT_TOKEN) env.POSTHOG_PROJECT_API_KEY = source.POSTHOG_PROJECT_TOKEN;
   const appUrl = (env.APP_URL ?? env.RENDER_EXTERNAL_URL ?? `http://localhost:${env.PORT}`).replace(/\/+$/, "");

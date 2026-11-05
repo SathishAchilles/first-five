@@ -73,6 +73,7 @@ export const REPORT_STATUS_LABELS = {
   rejected: "Rejected",
   published: "Published",
   failed: "Failed",
+  ready: "Ready",
 } as const;
 
 export const EVIDENCE_STRENGTH_LABELS = {

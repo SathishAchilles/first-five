@@ -69,6 +69,7 @@ export function ReportBadge({ status }: { status: ReportStatus }) {
     rejected: "danger",
     published: "accent",
     failed: "danger",
+    ready: "success",
   };
   return (
     <Pill tone={tone[status]} dot>

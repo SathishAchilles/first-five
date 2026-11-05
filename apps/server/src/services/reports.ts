@@ -1,24 +1,25 @@
 /**
- * Research reports, evidence-linked findings and backend-enforced approval.
+ * Research reports, evidence-linked findings and backend-enforced publishing.
  *
- * Approval policy:
+ * Publishing policy:
  *  - "owner" reports (written by the builder): approved by the project owner
- *    through First Five's own review step (channel "first_five").
- *  - "agenticorg" reports (UX Director): may only be published with an
- *    approval recorded in AgenticOrg's HITL system (channel "agenticorg").
- * Publishing always requires an approval matching the current report revision.
+ *    through First Five's own review step; publishing requires an approval
+ *    matching the current revision.
+ *  - "ux_director" reports: scored automatically by the rubric and "ready"
+ *    without any review; the owner publishes with one click when at least one
+ *    finding was kept.
+ *  - "agenticorg" reports (retired integration): read-only legacy.
  */
 import type { FindingDto, ReportDetail, ReportSummary, StudyMetrics } from "@firstfive/shared";
 import { FindingInputSchema, ReviewDecisionSchema } from "@firstfive/shared";
 import type { Prisma, Report, ReportFinding } from "@prisma/client";
 import type { AppContext } from "../context";
-import type { AnalysisResult } from "../integrations/agenticorg";
 import { audit } from "../lib/audit";
 import { randomToken, sha256 } from "../lib/crypto";
 import { AppError, conflict, notFound } from "../lib/errors";
-import { buildEvidence, type BuiltEvidence } from "./evidence";
+import { createAnalysisRun, kickRun } from "./analysis-pipeline";
+import { buildEvidence } from "./evidence";
 import { computeStudyMetrics } from "./metrics";
-import { validateResearchOutput } from "./research-output";
 import { reconcileExpired } from "./sessions";
 import { currentVersion, getOwnedStudy } from "./studies";
 
@@ -71,9 +72,9 @@ export async function createOwnerReport(ctx: AppContext, userId: string, studyId
 }
 
 /**
- * Requests a UX Director analysis. Never fabricates a run when AgenticOrg isn't connected.
- * The AgenticOrg run is synchronous (~20 s, occasionally ~90 s), so it executes in the
- * background; the report stays "processing" until the validated draft is stored.
+ * Requests a UX Director analysis: stores the evidence, creates the run's
+ * durable steps and starts the runner. One running analysis per study; the
+ * report stays "processing" until the scored report is finalized as "ready".
  */
 export async function requestAnalysis(ctx: AppContext, userId: string, studyId: string) {
   const study = await getOwnedStudy(ctx, userId, studyId);
@@ -85,7 +86,7 @@ export async function requestAnalysis(ctx: AppContext, userId: string, studyId: 
       "AI findings aren't available yet. Research findings become available when the UX Director is connected.",
     );
   }
-  const running = await ctx.db.report.findFirst({ where: { studyId: study.id, source: "agenticorg", status: "processing" } });
+  const running = await ctx.db.report.findFirst({ where: { studyId: study.id, source: "ux_director", status: "processing" } });
   if (running) return getReportDetail(ctx, userId, running.id);
 
   const version = await currentVersion(ctx, study);
@@ -103,13 +104,13 @@ export async function requestAnalysis(ctx: AppContext, userId: string, studyId: 
     throw new AppError(422, "no_finalized_attempts", "There are no finished attempts to analyze yet.");
   }
   const run = await ctx.db.agentRun.create({
-    data: { provider: "agenticorg", kind: "study_analysis", studyId: study.id, status: "running", inputDigest: sha256(JSON.stringify(built.pkg)) },
+    data: { provider: "ux_director", kind: "study_analysis", studyId: study.id, status: "running", inputDigest: sha256(JSON.stringify(built.pkg)) },
   });
   const report = await ctx.db.report.create({
     data: {
       studyId: study.id,
       studyVersion: version.version,
-      source: "agenticorg",
+      source: "ux_director",
       status: "processing",
       title: `${study.name} — UX Director report`,
       metricsSnapshot: snapshot as unknown as Prisma.InputJsonValue,
@@ -117,151 +118,10 @@ export async function requestAnalysis(ctx: AppContext, userId: string, studyId: 
       agentRunId: run.id,
     },
   });
+  await createAnalysisRun(ctx, { reportId: report.id, runId: run.id, built });
   await audit(ctx.db, { actorUserId: userId, actorType: "user", action: "report.analysis_requested", resourceType: "report", resourceId: report.id, metadata: { agentRunId: run.id } });
-  void runAnalysisJob(ctx, report.id, run.id, built).catch((err) => ctx.log.error({ err: (err as Error).message, reportId: report.id }, "analysis job crashed"));
+  kickRun(ctx, run.id);
   return getReportDetail(ctx, userId, report.id);
-}
-
-async function failAnalysis(ctx: AppContext, reportId: string, runId: string, error: string, extra: Prisma.AgentRunUpdateInput = {}) {
-  const message = error.slice(0, 2000);
-  await ctx.db.agentRun.update({ where: { id: runId }, data: { status: "failed", error: message, finishedAt: new Date(), ...extra } });
-  await ctx.db.report.updateMany({ where: { id: reportId, status: "processing" }, data: { status: "failed", failureReason: message.slice(0, 500) } });
-}
-
-/** Runs the UX Director, validates its output and stores a draft that awaits AgenticOrg's HITL approval. */
-export async function runAnalysisJob(ctx: AppContext, reportId: string, runId: string, built: BuiltEvidence) {
-  let result: AnalysisResult;
-  try {
-    result = await ctx.providers.uxDirector.runAnalysis(built.pkg, { jobId: runId, timeoutMs: ctx.config.AGENTICORG_REPORT_TIMEOUT_MS });
-  } catch (err) {
-    await failAnalysis(ctx, reportId, runId, (err as Error).message);
-    return;
-  }
-  const facts: Prisma.AgentRunUpdateInput = {
-    externalRunId: result.externalRunId || null,
-    details: { runId: result.runId, confidence: result.confidence, hitlTriggered: result.hitlTriggered } as Prisma.InputJsonValue,
-  };
-  if (result.status === "failed") {
-    await failAnalysis(ctx, reportId, runId, result.error ?? "Agent execution failed", facts);
-    return;
-  }
-  const validated = validateResearchOutput(result.output, built.scope);
-  if (!validated.ok) {
-    await failAnalysis(ctx, reportId, runId, `Output rejected by validation: ${validated.errors.slice(0, 10).join("; ")}`, facts);
-    return;
-  }
-  const output = validated.output;
-  const internal = (ids: string[]) => ids.map((id) => built.sessionIdByPublicId.get(id)).filter((x): x is string => Boolean(x));
-  const sessionOfResponse = new Map<string, string>();
-  for (const [publicId, ids] of built.scope.responseIdsBySession) for (const r of ids) sessionOfResponse.set(r, built.sessionIdByPublicId.get(publicId)!);
-
-  await ctx.db.$transaction(async (tx) => {
-    const report = await tx.report.findUniqueOrThrow({ where: { id: reportId } });
-    if (report.status !== "processing") return;
-    await tx.reportFinding.createMany({
-      data: output.aggregate_findings.map((f, position) => {
-        const quotes = (f.feedback_response_ids ?? [])
-          .filter((id) => built.scope.answerTextByResponse?.get(id))
-          .map((id) => ({ sessionId: sessionOfResponse.get(id)!, responseId: id, text: built.scope.answerTextByResponse!.get(id)! }));
-        const gap = f.expectation_gap;
-        const interpretation = [gap ? `Intended: ${gap.intended}` : null, gap ? `Reported: ${gap.reported}` : null, f.strength_rationale ?? null]
-          .filter(Boolean)
-          .join("\n");
-        return {
-          reportId,
-          position,
-          title: f.issue,
-          observed: gap?.observed ?? f.issue,
-          quotes: quotes as Prisma.InputJsonValue,
-          interpretation: interpretation || null,
-          evidenceStrength: f.evidence_strength,
-          suggestion: f.recommendation || null,
-          retestMetric: f.success_measure || null,
-          improvementPrompt: f.improvement_prompt || null,
-          supportingSessionIds: internal(f.affected_session_ids),
-          counterSessionIds: internal(f.counterexamples),
-          source: "agenticorg",
-        };
-      }),
-    });
-    await tx.report.update({
-      where: { id: reportId },
-      data: {
-        status: "awaiting_review",
-        agentOutput: output as unknown as Prisma.InputJsonValue,
-        summary: output.overall_limitations?.length ? `Limitations: ${output.overall_limitations.join(" ")}`.slice(0, 2000) : null,
-      },
-    });
-    await tx.reportApproval.create({ data: { reportId, reportRevision: report.revision, channel: "agenticorg", decision: "requested" } });
-    await tx.agentRun.update({ where: { id: runId }, data: { ...facts, status: "draft_ready", finishedAt: new Date() } });
-    await audit(tx, {
-      actorType: "system",
-      action: "report.draft_ready",
-      resourceType: "report",
-      resourceId: reportId,
-      metadata: { externalRunId: result.externalRunId, findings: output.aggregate_findings.length },
-    });
-  });
-}
-
-/**
- * Pulls HITL decisions from AgenticOrg for reports awaiting review (matched by the
- * run's correlation_id) and fails analysis runs orphaned by a restart.
- */
-export async function syncAgenticOrgApprovals(ctx: AppContext) {
-  const stale = new Date(Date.now() - ctx.config.AGENTICORG_REPORT_TIMEOUT_MS - 120_000);
-  const orphaned = await ctx.db.report.findMany({ where: { source: "agenticorg", status: "processing", createdAt: { lt: stale } } });
-  for (const r of orphaned) {
-    if (r.agentRunId) await failAnalysis(ctx, r.id, r.agentRunId, "The analysis didn't finish (the service restarted or timed out). Run it again.");
-  }
-  if (!ctx.providers.uxDirector.approvalsConfigured) return { checked: 0, decided: 0, orphaned: orphaned.length, skipped: true };
-
-  const waiting = await ctx.db.report.findMany({
-    where: { source: "agenticorg", status: "awaiting_review", agentRunId: { not: null } },
-    include: { agentRun: true },
-  });
-  let decided = 0;
-  for (const report of waiting) {
-    const externalRunId = report.agentRun?.externalRunId;
-    if (!externalRunId) continue;
-    let approval;
-    try {
-      approval = await ctx.providers.uxDirector.findApprovalForRun(externalRunId);
-    } catch (err) {
-      ctx.log.warn({ err: (err as Error).message }, "AgenticOrg approval sync failed");
-      break;
-    }
-    if (!approval || approval.decision === "pending") continue;
-    const next = approval.decision === "approved" ? "approved" : approval.decision === "rejected" ? "rejected" : "failed";
-    await ctx.db.$transaction(async (tx) => {
-      const res = await tx.report.updateMany({
-        where: { id: report.id, status: "awaiting_review", revision: report.revision },
-        data: { status: next, ...(next === "failed" ? { failureReason: "The AgenticOrg approval expired. Run the analysis again." } : {}) },
-      });
-      if (res.count !== 1) return;
-      await tx.reportApproval.upsert({
-        where: { externalApprovalId: approval.approvalId },
-        create: {
-          reportId: report.id,
-          reportRevision: report.revision,
-          channel: "agenticorg",
-          externalApprovalId: approval.approvalId,
-          decision: approval.decision === "expired" ? "rejected" : approval.decision,
-          note: approval.decision === "expired" ? "Expired in AgenticOrg without a decision" : null,
-        },
-        update: {},
-      });
-      await audit(tx, {
-        actorType: "system",
-        action: `report.agenticorg_${approval.decision}`,
-        resourceType: "report",
-        resourceId: report.id,
-        metadata: { externalApprovalId: approval.approvalId, reviewer: approval.reviewer, decidedAt: approval.decidedAt },
-      });
-      decided++;
-    });
-  }
-  return { checked: waiting.length, decided, orphaned: orphaned.length, skipped: false };
 }
 
 export async function listReportsForStudy(ctx: AppContext, studyId: string): Promise<ReportSummary[]> {
@@ -334,17 +194,35 @@ async function toFindingDto(ctx: AppContext, f: ReportFinding, websiteUrl: strin
     counterSessions: f.counterSessionIds.map(ref).filter((x): x is NonNullable<typeof x> => x != null),
     source: f.source as FindingDto["source"],
     assistantPrompt: f.improvementPrompt ?? codingAssistantPrompt({ websiteUrl, task, finding: f }),
+    confidenceScore: f.confidenceScore,
+    recommendationScore: f.recommendationScore,
   };
 }
 
 export function approvalPolicy(source: string): ReportDetail["approvalPolicy"] {
-  return source === "agenticorg"
-    ? { channel: "agenticorg", description: "UX Director reports are published only after approval in AgenticOrg's human review step." }
-    : { channel: "first_five", description: "You review and approve this report before it can be published or shared." };
+  if (source === "ux_director") {
+    return { channel: "automated", description: "Findings are scored automatically by the UX Director rubric; items below the confidence bar are left out. You publish the report when you're ready." };
+  }
+  if (source === "agenticorg") {
+    return { channel: "agenticorg", description: "Produced by the retired AgenticOrg integration. It can no longer be published; run a new analysis." };
+  }
+  return { channel: "first_five", description: "You review and approve this report before it can be published or shared." };
+}
+
+/** Finished, non-repeat attempts on the report's study version that the report doesn't include. */
+async function staleBy(ctx: AppContext, report: { source: string; studyId: string; studyVersion: number; sessionsIncluded: number | null; metricsSnapshot: unknown }) {
+  if (report.source === "owner") return 0;
+  const included = report.sessionsIncluded ?? (report.metricsSnapshot as StudyMetrics | null)?.finalized ?? 0;
+  const finalized = await ctx.db.studySession.count({
+    where: { studyId: report.studyId, studyVersion: { version: report.studyVersion }, isRepeat: false, status: { in: ["completed", "dropped"] } },
+  });
+  return Math.max(0, finalized - included);
 }
 
 export async function getReportDetail(ctx: AppContext, userId: string, reportId: string): Promise<ReportDetail> {
   const report = await getOwnedReport(ctx, userId, reportId);
+  // Opening a processing report resumes its run if the instance slept or restarted.
+  if (report.source === "ux_director" && report.status === "processing" && report.agentRunId) kickRun(ctx, report.agentRunId);
   return buildReportDetail(ctx, report.id);
 }
 
@@ -374,7 +252,7 @@ async function buildReportDetail(ctx: AppContext, reportId: string): Promise<Rep
       id: a.id,
       decision: a.decision,
       channel: a.channel,
-      reviewer: a.reviewer?.name ?? a.reviewer?.email ?? (a.channel === "agenticorg" ? "AgenticOrg reviewer" : null),
+      reviewer: a.reviewer?.name ?? a.reviewer?.email ?? (a.channel === "agenticorg" ? "AgenticOrg reviewer (legacy)" : null),
       note: a.note,
       revision: a.reportRevision,
       createdAt: a.createdAt.toISOString(),
@@ -382,7 +260,11 @@ async function buildReportDetail(ctx: AppContext, reportId: string): Promise<Rep
     shareUrl: report.shareToken && report.status === "published" ? `${ctx.config.appUrl}/r/${report.shareToken}` : null,
     approvalPolicy: approvalPolicy(report.source),
     failureReason: report.failureReason,
-    externalRunId: report.agentRun?.externalRunId ?? null,
+    externalRunId: report.agentRun?.externalRunId ?? (report.source === "ux_director" ? report.agentRunId : null),
+    staleBy: await staleBy(ctx, report),
+    legacy: report.source === "agenticorg",
+    droppedFindings: report.droppedFindings,
+    droppedRecommendations: report.droppedRecommendations,
   };
 }
 
@@ -409,7 +291,7 @@ async function resolveEvidence(ctx: AppContext, studyId: string, input: { suppor
 }
 
 function assertEditable(report: Report) {
-  if (report.source !== "owner") throw conflict("not_editable", "UX Director findings can't be edited here. Request a revision instead.");
+  if (report.source !== "owner") throw conflict("not_editable", "UX Director findings can't be edited; rubric scoring decides what's kept. Run the analysis again to refresh them.");
   if (!EDITABLE.includes(report.status)) {
     throw conflict("not_editable", "This report is in review or finished. Reopen it to make changes.");
   }
@@ -487,8 +369,19 @@ export async function refreshSnapshot(ctx: AppContext, userId: string, reportId:
   return getReportDetail(ctx, userId, report.id);
 }
 
+function assertOwnerReviewFlow(report: Report) {
+  if (report.source === "ux_director") {
+    throw conflict("no_review_step", "UX Director reports are scored automatically and have no review step. Publish the report when you're ready.");
+  }
+  if (report.source === "agenticorg") throw legacyConflict();
+}
+
+const legacyConflict = () =>
+  conflict("legacy_report", "This report came from the retired AgenticOrg integration and can't be changed or published. Run a new analysis.");
+
 export async function requestReview(ctx: AppContext, userId: string, reportId: string) {
   const report = await getOwnedReport(ctx, userId, reportId);
+  assertOwnerReviewFlow(report);
   if (!EDITABLE.includes(report.status)) throw conflict("invalid_transition", "Only drafts can be sent for review.");
   const findings = await ctx.db.reportFinding.count({ where: { reportId: report.id } });
   if (findings === 0) throw new AppError(422, "no_findings", "Add at least one finding before requesting review.");
@@ -504,14 +397,12 @@ export async function requestReview(ctx: AppContext, userId: string, reportId: s
   return getReportDetail(ctx, userId, report.id);
 }
 
-/** Records a human review decision. Owner-authored reports only; AgenticOrg reports require external HITL. */
+/** Records a human review decision. Owner-authored reports only. */
 export async function reviewReport(ctx: AppContext, userId: string, reportId: string, raw: unknown) {
   const report = await getOwnedReport(ctx, userId, reportId);
+  assertOwnerReviewFlow(report);
   const input = ReviewDecisionSchema.parse(raw);
   if (report.status !== "awaiting_review") throw conflict("invalid_transition", "This report isn't awaiting review.");
-  if (report.source === "agenticorg") {
-    throw conflict("external_approval_required", "UX Director reports must be approved in AgenticOrg's review step.");
-  }
   // Authorized approver for owner reports = the project owner (enforced by getOwnedReport).
   const next = input.decision === "approved" ? "approved" : input.decision === "rejected" ? "rejected" : "revision_requested";
   await ctx.db.$transaction(async (tx) => {
@@ -527,6 +418,7 @@ export async function reviewReport(ctx: AppContext, userId: string, reportId: st
 
 export async function reopenReport(ctx: AppContext, userId: string, reportId: string) {
   const report = await getOwnedReport(ctx, userId, reportId);
+  assertOwnerReviewFlow(report);
   if (!["rejected", "approved", "revision_requested"].includes(report.status) || report.source !== "owner") {
     throw conflict("invalid_transition", "This report can't be reopened.");
   }
@@ -536,24 +428,21 @@ export async function reopenReport(ctx: AppContext, userId: string, reportId: st
 }
 
 /**
- * Publishes only when an approval for the CURRENT revision exists on the
- * channel required by the report's policy. Idempotent.
+ * Owner reports publish only with an approval for the CURRENT revision.
+ * UX Director reports publish from "ready" with at least one kept finding.
+ * Idempotent: publishing a published report returns the same share link.
  */
 export async function publishReport(ctx: AppContext, userId: string, reportId: string) {
   const report = await getOwnedReport(ctx, userId, reportId);
   if (report.status === "published") return getReportDetail(ctx, userId, report.id);
+  if (report.source === "agenticorg") throw legacyConflict();
+  if (report.source === "ux_director") return publishScoredReport(ctx, userId, report);
   if (report.status !== "approved") throw conflict("approval_required", "This report needs an approved review before it can be published.");
-  const policy = approvalPolicy(report.source);
   const approval = await ctx.db.reportApproval.findFirst({
-    where: { reportId: report.id, reportRevision: report.revision, decision: "approved", channel: policy.channel },
+    where: { reportId: report.id, reportRevision: report.revision, decision: "approved", channel: "first_five" },
     orderBy: { createdAt: "desc" },
   });
   if (!approval) throw conflict("approval_required", "No approval was found for the current version of this report.");
-  if (policy.channel === "agenticorg") {
-    // Confirm the approval with the provider; a local flag is never sufficient.
-    const confirmed = await ctx.providers.uxDirector.getApproval(approval.externalApprovalId ?? "");
-    if (confirmed.decision !== "approved") throw conflict("approval_required", "AgenticOrg hasn't confirmed this approval.");
-  }
   const shareToken = randomToken(18);
   const res = await ctx.db.report.updateMany({
     where: { id: report.id, status: "approved", revision: report.revision },
@@ -572,10 +461,23 @@ export async function publishReport(ctx: AppContext, userId: string, reportId: s
   return getReportDetail(ctx, userId, report.id);
 }
 
+async function publishScoredReport(ctx: AppContext, userId: string, report: Report) {
+  if (report.status !== "ready") throw conflict("not_ready", "This report isn't ready to publish yet.");
+  const kept = await ctx.db.reportFinding.count({ where: { reportId: report.id } });
+  if (kept === 0) throw new AppError(422, "no_kept_findings", "No finding met the confidence bar, so there's nothing to publish. Run the analysis again after more attempts.");
+  const shareToken = randomToken(18);
+  const res = await ctx.db.report.updateMany({ where: { id: report.id, status: "ready" }, data: { status: "published", publishedAt: new Date(), shareToken } });
+  if (res.count === 1) {
+    await audit(ctx.db, { actorUserId: userId, actorType: "user", action: "report.published", resourceType: "report", resourceId: report.id, metadata: { findings: kept, policy: "automated" } });
+  }
+  return getReportDetail(ctx, userId, report.id);
+}
+
 export async function unpublishReport(ctx: AppContext, userId: string, reportId: string) {
   const report = await getOwnedReport(ctx, userId, reportId);
   if (report.status !== "published") throw conflict("invalid_transition", "This report isn't published.");
-  await ctx.db.report.update({ where: { id: report.id }, data: { status: "approved", shareToken: null, publishedAt: null } });
+  const back = report.source === "owner" ? "approved" : "ready";
+  await ctx.db.report.update({ where: { id: report.id }, data: { status: back, shareToken: null, publishedAt: null } });
   await audit(ctx.db, { actorUserId: userId, actorType: "user", action: "report.unpublished", resourceType: "report", resourceId: report.id });
   return getReportDetail(ctx, userId, report.id);
 }

@@ -9,7 +9,7 @@ import type { AppContext } from "../context";
 import { audit } from "../lib/audit";
 import { randomToken, sha256 } from "../lib/crypto";
 import { AppError, conflict, notFound } from "../lib/errors";
-import { ProviderUnavailableError } from "../integrations/agenticorg";
+import { ProviderUnavailableError } from "../integrations/errors";
 import type { VerifiedOrderStatus } from "../integrations/pinelabs";
 import { getPlan } from "../plans";
 import { recordActivationIfFirst, recordConversion } from "./conversions";

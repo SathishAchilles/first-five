@@ -6,7 +6,7 @@
  */
 import type { StudyMetrics } from "@firstfive/shared";
 import type { AppContext } from "../context";
-import type { EvidencePackage } from "../integrations/agenticorg";
+import { safeCustomProps, type EvidenceEvent, type EvidencePackage } from "../ux-director/types";
 import type { EvidenceScope } from "./research-output";
 import { orderEvents } from "./timeline";
 
@@ -68,15 +68,22 @@ export async function buildEvidence(
       final_reason: s.finalReason,
       duration_s: end ? Math.max(0, Math.round((end.getTime() - s.startedAt.getTime()) / 1000)) : null,
       data_quality_flag: s.dataQualityFlags.length ? s.dataQualityFlags.join(",") : null,
-      events: events.map((e) => ({
-        event_id: e.eventId,
-        seq: e.clientSequence,
-        name: e.eventName,
-        route: e.pagePath,
-        element_key: e.elementKey,
-        element_label: e.elementLabel,
-        t_ms: Math.max(0, e.clientTimestamp.getTime() - s.startedAt.getTime()),
-      })),
+      events: events.map((e): EvidenceEvent => {
+        const base: EvidenceEvent = {
+          event_id: e.eventId,
+          seq: e.clientSequence,
+          name: e.eventName,
+          route: e.pagePath,
+          element_key: e.elementKey,
+          element_label: e.elementLabel,
+          t_ms: Math.max(0, e.clientTimestamp.getTime() - s.startedAt.getTime()),
+        };
+        if (e.eventName !== "ff_custom_event") return base;
+        const props = (e.properties ?? {}) as Record<string, unknown>;
+        const name = typeof props.custom_event_name === "string" ? props.custom_event_name : null;
+        const kept = safeCustomProps(props);
+        return { ...base, ...(name ? { custom_event: name } : {}), ...(Object.keys(kept).length ? { props: kept } : {}) };
+      }),
       feedback: [...s.responses]
         .sort((a, b) => a.question.position - b.question.position)
         .map((r) => ({
@@ -119,4 +126,22 @@ export async function buildEvidence(
     scope,
     sessionIdByPublicId,
   };
+}
+
+/** Rebuilds the validation scope from a stored evidence package (used when a run resumes). */
+export function scopeFromPackage(pkg: EvidencePackage): EvidenceScope {
+  const scope: EvidenceScope = {
+    studyPublicId: pkg.study.study_id,
+    sessionPublicIds: new Set(),
+    eventIdsBySession: new Map(),
+    responseIdsBySession: new Map(),
+    answerTextByResponse: new Map(),
+  };
+  for (const s of pkg.sessions) {
+    scope.sessionPublicIds.add(s.session_id);
+    scope.eventIdsBySession.set(s.session_id, new Set(s.events.map((e) => e.event_id)));
+    scope.responseIdsBySession.set(s.session_id, new Set(s.feedback.map((f) => f.response_id)));
+    for (const f of s.feedback) if (f.answer_text) scope.answerTextByResponse!.set(f.response_id, f.answer_text);
+  }
+  return scope;
 }

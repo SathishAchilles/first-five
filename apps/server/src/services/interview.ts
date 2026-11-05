@@ -36,12 +36,13 @@ async function ensureQuestions(ctx: AppContext, sessionId: string): Promise<Inte
 
   // Contextual question: only when the UX Director is genuinely connected; otherwise the neutral fallback.
   let q2Text: string = STANDARD_QUESTIONS.q2_context.fallbackText;
-  let q2Source: "fallback" | "agenticorg" = "fallback";
+  let q2Source: "fallback" | "ux_director" = "fallback";
   let q2RunId: string | null = null;
   if (ctx.providers.uxDirector.configured && ctx.providers.uxDirector.implemented) {
-    const timeoutMs = ctx.config.AGENTICORG_Q2_TIMEOUT_MS;
-    const run = await ctx.db.agentRun.create({ data: { provider: "agenticorg", kind: "contextual_question", studySessionId: sessionId, status: "running" } });
-    let outcome: { status: string; error?: string; externalRunId?: string; details?: object } = { status: "fallback", error: "timed out" };
+    const timeoutMs = ctx.config.UX_DIRECTOR_Q2_TIMEOUT_MS;
+    const run = await ctx.db.agentRun.create({ data: { provider: "ux_director", kind: "contextual_question", studySessionId: sessionId, status: "running" } });
+    const started = Date.now();
+    let outcome: { status: string; error?: string; details?: object } = { status: "fallback", error: "timed out" };
     try {
       const session = await ctx.db.studySession.findUniqueOrThrow({ where: { id: sessionId }, include: { studyVersion: true, events: true } });
       run.studyId = session.studyId;
@@ -73,12 +74,11 @@ async function ensureQuestions(ctx: AppContext, sessionId: string): Promise<Inte
       ]);
       if (generated?.question) {
         q2Text = sanitizeParticipantText(generated.question, 300) ?? q2Text;
-        q2Source = "agenticorg";
+        q2Source = "ux_director";
         q2RunId = run.id;
         outcome = {
           status: "completed",
-          externalRunId: generated.externalRunId,
-          details: { evidenceEventId: generated.evidenceEventId, hitlTriggered: generated.hitlTriggered },
+          details: { evidenceEventId: generated.evidenceEventId, model: generated.model, usage: generated.usage, latencyMs: Date.now() - started },
         };
       } else if (generated === null) {
         outcome = { status: "fallback", error: "timed out or no usable question" };
@@ -93,8 +93,7 @@ async function ensureQuestions(ctx: AppContext, sessionId: string): Promise<Inte
         studyId: run.studyId,
         status: outcome.status,
         error: outcome.error ?? null,
-        externalRunId: outcome.externalRunId ?? null,
-        details: (outcome.details ?? null) as object,
+        details: (outcome.details ?? { latencyMs: Date.now() - started }) as object,
         finishedAt: new Date(),
       },
     });

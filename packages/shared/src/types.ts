@@ -19,7 +19,10 @@ export type ReportStatus =
   | "approved"
   | "rejected"
   | "published"
-  | "failed";
+  | "failed"
+  | "ready";
+/** "ux_director" = in-house UX Director; "agenticorg" = legacy, read-only. */
+export type ReportSource = "owner" | "ux_director" | "agenticorg";
 export type ProviderStatus = "not_configured" | "configured" | "verification_pending" | "verified" | "error";
 
 export interface ApiError {
@@ -287,8 +290,12 @@ export interface FindingDto {
   affectedCount: number;
   supportingSessions: { id: string; label: string; status: SessionStatus }[];
   counterSessions: { id: string; label: string; status: SessionStatus }[];
-  source: "owner" | "agenticorg";
+  source: ReportSource;
   assistantPrompt: string;
+  /** UX Director rubric score for the finding (0–100); null for owner-written findings. */
+  confidenceScore: number | null;
+  /** UX Director rubric score for the recommendation (0–100); null when none was kept. */
+  recommendationScore: number | null;
 }
 
 export interface ReportSummary {
@@ -297,7 +304,7 @@ export interface ReportSummary {
   studyName: string;
   title: string;
   status: ReportStatus;
-  source: "owner" | "agenticorg";
+  source: ReportSource;
   revision: number;
   findingCount: number;
   updatedAt: string;
@@ -315,11 +322,18 @@ export interface ReportDetail extends ReportSummary {
   findings: FindingDto[];
   approvals: { id: string; decision: string; channel: string; reviewer: string | null; note: string | null; revision: number; createdAt: string }[];
   shareUrl: string | null;
-  approvalPolicy: { channel: "first_five" | "agenticorg"; description: string };
+  approvalPolicy: { channel: "first_five" | "automated" | "agenticorg"; description: string };
   /** Why a UX Director analysis failed (validation or provider error). */
   failureReason: string | null;
-  /** AgenticOrg run reference (correlation_id) for UX Director reports. */
+  /** Run reference for UX Director reports (agent run id; AgenticOrg correlation_id for legacy reports). */
   externalRunId: string | null;
+  /** Finished attempts since the snapshot that this report doesn't include (0 when current). */
+  staleBy: number;
+  /** Produced by the retired AgenticOrg integration: viewable, not publishable. */
+  legacy: boolean;
+  /** Findings / recommendations removed by UX Director rubric scoring. */
+  droppedFindings: number;
+  droppedRecommendations: number;
 }
 
 export interface PublicStudyInfo {
@@ -349,7 +363,7 @@ export interface FeedbackQuestionDto {
   position: number;
   kind: "ease_scale" | "open_text";
   text: string;
-  source: "standard" | "fallback" | "agenticorg";
+  source: "standard" | "fallback" | "ux_director" | "agenticorg";
   optional: boolean;
   options?: { value: string; label: string }[];
 }
@@ -362,7 +376,7 @@ export interface FeedbackSessionResponse {
 }
 
 export interface ProviderStatusDto {
-  provider: "sdk" | "posthog" | "agenticorg" | "pinelabs" | "postgres";
+  provider: "sdk" | "posthog" | "ux_director" | "pinelabs" | "postgres";
   name: string;
   status: ProviderStatus;
   description: string;

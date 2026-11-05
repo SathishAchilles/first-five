@@ -240,6 +240,7 @@ function IntegrationsCard() {
                     </Pill>
                   ))}
                 </div>
+                {p.provider === "ux_director" && p.details?.recentUsage != null && <UsageLine usage={p.details.recentUsage as Record<string, number>} />}
                 {p.lastCheckedAt && (
                   <p className="mt-2 text-xs text-ink-muted">
                     Last checked {formatDateTime(p.lastCheckedAt)}
@@ -260,6 +261,16 @@ function IntegrationsCard() {
         ))}
       </ul>
     </Card>
+  );
+}
+
+function UsageLine({ usage: u }: { usage: Record<string, number> }) {
+  const n = (v: number | undefined) => (v ?? 0).toLocaleString();
+  return (
+    <p className="mt-2 text-xs text-ink-muted">
+      Last 7 days: {n(u.analyses)} analyses, {n(u.questions)} questions{u.failed ? `, ${n(u.failed)} failed` : ""} · {n(u.input_tokens)} input tokens ({n(u.cache_read_input_tokens)} cached),{" "}
+      {n(u.output_tokens)} output tokens
+    </p>
   );
 }
 

@@ -444,6 +444,8 @@ Render free web instances can sleep after inactivity and have ephemeral local fi
 
 ## 9.2 Minimal actual AgenticOrg workflow (P0)
 
+> **Amendment (2026-11-03, pending product-owner sign-off):** the UX Director no longer runs on AgenticOrg. It's an in-house, code-ordered pipeline in the First Five app (evidence → map per attempt → reduce → verify → rubric score → ready), using Claude models through the Anthropic API. The human-in-the-loop *approval* step is replaced by automated rubric scoring: findings and recommendations below the confidence bar are dropped. The owner's one-click **Publish** remains the human decision before anything is public. AgenticOrg-produced reports are read-only legacy. See `docs/integrations/UX_DIRECTOR.md`.
+
 ```text
 REQUEST (Render creates job with scoped study/run ID)
    → VALIDATE evidence + permission

@@ -108,7 +108,20 @@ function normalizeIds(raw: unknown, scope: EvidenceScope): unknown {
   return o;
 }
 
-export function validateResearchOutput(raw: unknown, scope: EvidenceScope): { ok: true; output: ResearchOutput } | { ok: false; errors: string[] } {
+/** Counts or rates the model has no basis for: "40%", "3 of 5", "4 participants". */
+const INVENTED_NUMBER = /\d+(?:\.\d+)?\s?%|\b\d+\s*(?:of|out of)\s*\d+\b|\b\d+\s+(?:participants?|users?|people|testers?|attempts?|sessions?)\b/i;
+const ADVICE_FIELDS = ["recommendation", "success_measure", "improvement_prompt"] as const;
+
+export type ValidationResult =
+  | {
+      ok: true;
+      output: ResearchOutput;
+      /** Indexes of aggregate findings whose recommendation, retest measure or prompt states numbers (soft signal for scoring). */
+      inventedNumbers: number[];
+    }
+  | { ok: false; errors: string[] };
+
+export function validateResearchOutput(raw: unknown, scope: EvidenceScope): ValidationResult {
   const parsed = ResearchOutputSchema.safeParse(normalizeIds(raw, scope));
   if (!parsed.success) return { ok: false, errors: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
   const out = parsed.data;
@@ -149,9 +162,14 @@ export function validateResearchOutput(raw: unknown, scope: EvidenceScope): { ok
     return { ...f, affected_count_from_backend: distinct };
   });
 
-  if (strings({ i: out.individual_findings, a: out.aggregate_findings, l: out.overall_limitations }).some((s) => PERCENT.test(s))) {
+  // Percentages in the findings themselves are hard errors; in advice text they're a scoring signal.
+  const findingText = out.aggregate_findings.map((f) => Object.fromEntries(Object.entries(f).filter(([k]) => !(ADVICE_FIELDS as readonly string[]).includes(k))));
+  if (strings({ i: out.individual_findings, a: findingText, l: out.overall_limitations }).some((s) => PERCENT.test(s))) {
     errors.push("output contains percentage claims; five-person studies report counts only");
   }
+  const inventedNumbers = out.aggregate_findings
+    .map((f, i) => (ADVICE_FIELDS.some((k) => INVENTED_NUMBER.test(f[k] ?? "")) ? i : -1))
+    .filter((i) => i >= 0);
 
-  return errors.length ? { ok: false, errors } : { ok: true, output: { ...out, aggregate_findings: aggregate } };
+  return errors.length ? { ok: false, errors } : { ok: true, output: { ...out, aggregate_findings: aggregate }, inventedNumbers };
 }

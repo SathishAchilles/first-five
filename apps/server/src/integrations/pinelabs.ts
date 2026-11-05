@@ -7,7 +7,7 @@
  * as unavailable and no paid entitlement can ever be issued.
  */
 import type { AppConfig } from "../config";
-import { ProviderUnavailableError } from "./agenticorg";
+import { ProviderUnavailableError } from "./errors";
 import type { HealthResult } from "./posthog";
 
 export interface CheckoutRequest {

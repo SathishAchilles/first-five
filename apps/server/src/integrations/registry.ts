@@ -1,7 +1,7 @@
 import type { ProviderStatusDto } from "@firstfive/shared";
 import type { AppConfig } from "../config";
 import type { Db } from "../db";
-import { AgenticOrgAdapter, type UxDirectorProvider } from "./agenticorg";
+import { InHouseUxDirector, uxDirectorKeyName, type UxDirectorProvider } from "./ux-director";
 import { PineLabsAdapter, type PaymentProvider } from "./pinelabs";
 import { PostHogAdapter, type AnalyticsProvider, type HealthResult } from "./posthog";
 
@@ -14,13 +14,13 @@ export interface Providers {
 export function createProviders(config: AppConfig): Providers {
   return {
     analytics: new PostHogAdapter(config),
-    uxDirector: new AgenticOrgAdapter(config),
+    uxDirector: new InHouseUxDirector(config),
     payments: new PineLabsAdapter(config),
   };
 }
 
 export type ProviderKey = ProviderStatusDto["provider"];
-export const PROVIDER_KEYS: ProviderKey[] = ["postgres", "sdk", "posthog", "agenticorg", "pinelabs"];
+export const PROVIDER_KEYS: ProviderKey[] = ["postgres", "sdk", "posthog", "ux_director", "pinelabs"];
 
 const META: Record<ProviderKey, { name: string; description: string; keys: (keyof AppConfig)[] }> = {
   postgres: {
@@ -38,10 +38,10 @@ const META: Record<ProviderKey, { name: string; description: string; keys: (keyo
     description: "Detailed behavioral analytics: paths, funnels and event timelines.",
     keys: ["POSTHOG_HOST", "POSTHOG_PROJECT_API_KEY", "POSTHOG_PERSONAL_API_KEY", "POSTHOG_PROJECT_ID"],
   },
-  agenticorg: {
-    name: "AgenticOrg — UX Director",
-    description: "Contextual interview questions, research findings and human-approved publishing.",
-    keys: ["AGENTICORG_BASE_URL", "AGENTICORG_API_KEY", "AGENTICORG_Q2_AGENT_ID", "AGENTICORG_REPORT_AGENT_ID"],
+  ux_director: {
+    name: "UX Director (First Five)",
+    description: "Contextual interview questions and rubric-scored research findings, using Claude Sonnet 5.5 by default (or Gemini).",
+    keys: ["ANTHROPIC_API_KEY"],
   },
   pinelabs: {
     name: "Pine Labs",
@@ -50,8 +50,13 @@ const META: Record<ProviderKey, { name: string; description: string; keys: (keyo
   },
 };
 
+/** The UX Director's key follows UX_DIRECTOR_PROVIDER. */
+function providerKeys(config: AppConfig, key: ProviderKey): (keyof AppConfig)[] {
+  return key === "ux_director" ? [uxDirectorKeyName(config)] : META[key].keys;
+}
+
 function envConfigured(config: AppConfig, key: ProviderKey): boolean {
-  return META[key].keys.every((k) => Boolean(config[k]));
+  return providerKeys(config, key).every((k) => Boolean(config[k]));
 }
 
 /**
@@ -61,6 +66,7 @@ function envConfigured(config: AppConfig, key: ProviderKey): boolean {
 export async function listProviderStatuses(config: AppConfig, db: Db): Promise<ProviderStatusDto[]> {
   const rows = await db.providerConnection.findMany();
   const byKey = new Map(rows.map((r) => [r.provider, r]));
+  const uxUsage = await recentUxDirectorUsage(db);
   return PROVIDER_KEYS.map((key) => {
     const row = byKey.get(key);
     const configured = envConfigured(config, key);
@@ -71,13 +77,32 @@ export async function listProviderStatuses(config: AppConfig, db: Db): Promise<P
       name: META[key].name,
       description: META[key].description,
       status,
-      configuredKeys: META[key].keys.map((k) => ({ key: String(k), present: Boolean(config[k]) })),
+      configuredKeys: providerKeys(config, key).map((k) => ({ key: String(k), present: Boolean(config[k]) })),
       lastCheckedAt: row?.lastCheckedAt?.toISOString() ?? null,
       lastSuccessAt: row?.lastSuccessAt?.toISOString() ?? null,
       lastError: configured ? (row?.lastError ?? null) : null,
-      details: (row?.details as Record<string, unknown> | null) ?? null,
+      details: key === "ux_director" ? { ...((row?.details as Record<string, unknown> | null) ?? {}), recentUsage: uxUsage } : ((row?.details as Record<string, unknown> | null) ?? null),
     };
   });
+}
+
+/** Token usage of UX Director runs in the last 7 days, for the admin cost view. */
+async function recentUxDirectorUsage(db: Db) {
+  const since = new Date(Date.now() - 7 * 24 * 3600_000);
+  const runs = await db.agentRun.findMany({ where: { provider: "ux_director", startedAt: { gte: since } }, select: { kind: true, status: true, details: true } });
+  const total = { analyses: 0, questions: 0, failed: 0, input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0 };
+  for (const r of runs) {
+    if (r.kind === "study_analysis") total.analyses++;
+    else if (r.kind === "contextual_question") total.questions++;
+    if (r.status === "failed") total.failed++;
+    const u = (r.details as { usage?: Record<string, number> } | null)?.usage;
+    if (u) {
+      total.input_tokens += u.input_tokens ?? 0;
+      total.output_tokens += u.output_tokens ?? 0;
+      total.cache_read_input_tokens += u.cache_read_input_tokens ?? 0;
+    }
+  }
+  return total;
 }
 
 export async function providerStatus(config: AppConfig, db: Db, key: ProviderKey): Promise<ProviderStatusDto["status"]> {
@@ -109,9 +134,16 @@ export async function verifyProvider(
     case "posthog":
       result = await providers.analytics.verifyRoundTrip();
       break;
-    case "agenticorg":
+    case "ux_director": {
+      const run = await db.agentRun.create({ data: { provider: "ux_director", kind: "verification", status: "running" } });
       result = await providers.uxDirector.healthCheck();
+      await db.agentRun.update({
+        where: { id: run.id },
+        data: { status: result.ok ? "completed" : "failed", error: result.ok ? null : result.message.slice(0, 2000), details: (result.details ?? {}) as object, finishedAt: new Date() },
+      });
+      result = { ...result, message: `${result.message} Run ${run.id}.`, details: { ...result.details, runId: run.id } };
       break;
+    }
     case "pinelabs":
       result = await providers.payments.healthCheck();
       break;

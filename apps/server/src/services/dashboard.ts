@@ -84,7 +84,7 @@ export async function getDashboard(ctx: AppContext, userId: string, studyId: str
 
   const [posthogStatus, uxDirectorStatus, reports] = await Promise.all([
     providerStatus(ctx.config, ctx.db, "posthog"),
-    providerStatus(ctx.config, ctx.db, "agenticorg"),
+    providerStatus(ctx.config, ctx.db, "ux_director"),
     listReportsForStudy(ctx, owned.id),
   ]);
 

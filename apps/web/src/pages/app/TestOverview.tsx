@@ -208,7 +208,7 @@ function Dashboard({ d }: { d: DashboardResponse }) {
           )}
           {d.insights.uxDirectorStatus !== "verified" && d.insights.latestReport && (
             <p className="mt-3 text-xs text-ink-muted">
-              <Pill>UX Director not connected</Pill>
+              <Pill>UX Director (First Five) not connected</Pill>
             </p>
           )}
         </Card>

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { Client, createHarness, json, makeAdmin, resetDb, signup, type Harness } from "../setup/harness";
+import { Client, createHarness, json, makeSuperadmin, resetDb, signup, type Harness } from "../setup/harness";
 
 let h: Harness;
 beforeAll(async () => {
@@ -10,7 +10,7 @@ afterAll(async () => h.close());
 
 async function adminClient() {
   const a = await signup(h.app);
-  await makeAdmin(h.db, a.email);
+  await makeSuperadmin(h.db, a.email);
   return a.client;
 }
 

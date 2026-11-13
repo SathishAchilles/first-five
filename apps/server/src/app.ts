@@ -98,7 +98,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
     if (session || !returnToken) return;
     const own = await resolveAuthSession(ctx, returnToken);
     reply.clearCookie(ADMIN_RETURN_COOKIE, { path: "/" });
-    if (!own || own.readOnly || own.user.role !== "admin") return;
+    if (!own || own.readOnly || own.user.role !== "superadmin") return;
     req.user = own.user;
     req.authToken = returnToken;
     reply.setCookie(SESSION_COOKIE, returnToken, { httpOnly: true, secure: config.secureCookies, sameSite: "lax", path: "/", expires: own.expiresAt });

@@ -7,7 +7,7 @@ import {
   createHarness,
   json,
   launchedStudy,
-  makeAdmin,
+  makeSuperadmin,
   resetDb,
   signup,
   signupWithAccess,
@@ -45,7 +45,7 @@ beforeAll(async () => {
   h = await createHarness();
   await resetDb(h.db);
   const a = await signup(h.app);
-  await makeAdmin(h.db, a.email);
+  await makeSuperadmin(h.db, a.email);
   admin = a.client;
   adminId = await idOf(a.email);
   const b = await signupWithAccess(h, { studyCredits: 2 });
@@ -71,7 +71,7 @@ describe("view as client", () => {
 
   it("refuses to view an admin account", async () => {
     const other = await signup(h.app);
-    await makeAdmin(h.db, other.email);
+    await makeSuperadmin(h.db, other.email);
     expect((await start(admin, await idOf(other.email))).statusCode).toBe(403);
     expect(await h.db.authSession.count({ where: { readOnly: true } })).toBe(0);
   });

@@ -166,7 +166,7 @@ export function AppLayout() {
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [location.pathname]);
 
-  const links = [...NAV, ...(me?.user.role === "admin" ? [{ to: "/app/admin", label: "Admin", icon: ShieldCheck }] : [])];
+  const links = [...NAV, ...(me?.user.role === "superadmin" ? [{ to: "/app/admin", label: "Superadmin", icon: ShieldCheck }] : [])];
   const navItems = links.map((l) => (
     <NavLink
       key={l.to}

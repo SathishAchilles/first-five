@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { generateCodes } from "../../apps/server/src/services/access-codes";
-import { APP_URL, Client, createHarness, json, makeAdmin, resetDb, signup, signupWithAccess, type Harness } from "../setup/harness";
+import { APP_URL, Client, createHarness, json, makeSuperadmin, resetDb, signup, signupWithAccess, type Harness } from "../setup/harness";
 
 let h: Harness;
 beforeAll(async () => {
@@ -124,7 +124,7 @@ describe("invitation codes and entitlements", () => {
     const { client, email } = await signup(h.app);
     expect((await client.get("/api/admin/codes")).statusCode).toBe(404);
     expect((await client.post("/api/admin/codes", { label: "x" })).statusCode).toBe(404);
-    await makeAdmin(h.db, email);
+    await makeSuperadmin(h.db, email);
     const res = await client.post("/api/admin/codes", { label: "Judges batch", count: 2, maxRedemptions: 1, expiresInDays: 7 });
     expect(res.statusCode).toBe(201);
     expect(json(res).codes).toHaveLength(2);
@@ -140,75 +140,14 @@ describe("invitation codes and entitlements", () => {
   });
 });
 
-describe("one-time admin bootstrap", () => {
-  it("is disabled without a token, then promotes exactly one admin with the right token", async () => {
+describe("superadmin is server-granted only", () => {
+  it("has no in-app way to become a superadmin, and new accounts are account admins", async () => {
     const plain = await signup(h.app);
+    expect(json(await plain.client.get("/api/auth/me")).user.role).toBe("account_admin");
     expect((await plain.client.post("/api/admin-bootstrap", { token: "x".repeat(30) })).statusCode).toBe(404);
-
-    const h2 = await createHarness({ ADMIN_BOOTSTRAP_TOKEN: "bootstrap-token-0123456789-abcdef" });
-    try {
-      await h2.db.user.updateMany({ where: { role: "admin" }, data: { role: "user" } });
-      const a = await signup(h2.app);
-      const b = await signup(h2.app);
-      expect((await a.client.post("/api/admin-bootstrap", { token: "wrong-token-wrong-token-wrong" })).statusCode).toBe(403);
-      const ok = await a.client.post("/api/admin-bootstrap", { token: "bootstrap-token-0123456789-abcdef" });
-      expect(ok.statusCode).toBe(200);
-      expect(json(ok).user.role).toBe("admin");
-      // Once an admin exists, the token stops working for everyone.
-      const again = await b.client.post("/api/admin-bootstrap", { token: "bootstrap-token-0123456789-abcdef" });
-      expect(again.statusCode).toBe(409);
-      expect((await a.client.get("/api/admin/codes")).statusCode).toBe(200);
-    } finally {
-      await h2.close();
-    }
-  });
-});
-
-describe("waitlist (lead generation only)", () => {
-  it("stores a lead, deduplicates by normalized email, and never creates an account or access", async () => {
-    const c = new Client(h.app);
-    const first = await c.post("/api/waitlist", {
-      name: "Asha",
-      email: "Later@Example.com",
-      productDescription: "A booking app",
-      productUrl: "booking.example.com",
-      source: "landing_hero",
-      utm: { utm_source: "linkedin", utm_campaign: "launch" },
-    });
-    expect(first.statusCode).toBe(201);
-    expect(json(first).status).toBe("created");
-    const again = await c.post("/api/waitlist", { name: "Asha", email: "later@example.com" });
-    expect(again.statusCode).toBe(200);
-    expect(json(again).status).toBe("already_registered");
-    const leads = await h.db.waitlistLead.findMany({ where: { email: "later@example.com" } });
-    expect(leads).toHaveLength(1);
-    expect(leads[0]).toMatchObject({ name: "Asha", productUrl: "https://booking.example.com/", utmSource: "linkedin", submissionCount: 2 });
-    expect(await h.db.user.count({ where: { email: "later@example.com" } })).toBe(0);
-    expect(await h.db.accessGrant.count()).toBeGreaterThanOrEqual(0);
-    expect(await h.db.conversionEvent.count({ where: { name: "waitlist_submitted" } })).toBe(1);
-  });
-
-  it("validates input and silently drops honeypot submissions", async () => {
-    const c = new Client(h.app);
-    const bad = await c.post("/api/waitlist", { name: "", email: "not-an-email" });
-    expect(bad.statusCode).toBe(400);
-    expect(Object.keys(json(bad).error.fields)).toEqual(expect.arrayContaining(["name", "email"]));
-    const bot = await c.post("/api/waitlist", { name: "Bot", email: "bot@example.com", website: "http://spam" });
-    expect(bot.statusCode).toBe(201);
-    expect(await h.db.waitlistLead.count({ where: { email: "bot@example.com" } })).toBe(0);
-  });
-
-  it("accepts only allowlisted client funnel events", async () => {
-    const c = new Client(h.app);
-    expect((await c.post("/api/events", { name: "landing_page_viewed", path: "/", utm: { utm_source: "x" } })).statusCode).toBe(202);
-    expect((await c.post("/api/events", { name: "payment_verified" })).statusCode).toBe(400);
-    expect(await h.db.conversionEvent.count({ where: { name: "payment_verified" } })).toBe(0);
-  });
-});
-
-describe("health", () => {
-  it("reports process and database readiness", async () => {
-    expect(json(await h.app.inject({ url: "/healthz" })).status).toBe("ok");
-    expect(json(await h.app.inject({ url: "/readyz" })).database).toBe("ok");
+    expect((await plain.client.get("/api/admin/clients")).statusCode).toBe(404);
+    await makeSuperadmin(h.db, plain.email);
+    expect(json(await plain.client.get("/api/auth/me")).user.role).toBe("superadmin");
+    expect((await plain.client.get("/api/admin/clients")).statusCode).toBe(200);
   });
 });

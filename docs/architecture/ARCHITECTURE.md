@@ -8,7 +8,7 @@ Builder / participant browser ──► Render web service (Fastify, Node 22)
                                    ├─ Builder API      /api/auth, /api/projects, /api/studies, /api/reports …
                                    ├─ Participant API  /api/public/…   (first-party cookies + feedback handoff)
                                    ├─ SDK API          /api/sdk/…      (CORS, bearer credentials, no cookies)
-                                   ├─ Admin API        /api/admin/…    (role = admin)
+                                   ├─ Admin API        /api/admin/…    (role = superadmin)
                                    └─ Scheduler (best effort): deadline sweep, outbox delivery, retention
                                          │
 Customer website + SDK (separate) ───────┘ HTTPS event batches

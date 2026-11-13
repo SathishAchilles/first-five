@@ -59,12 +59,16 @@ Production-like run: `npm run build && npm start` → http://localhost:3000.
 - **Invitation code** (`/redeem`): judges and pilot users get the same kind of study-credit entitlement without payment.
 - A credit is consumed atomically when a test is first launched. Accounts without any grant can't use the workspace.
 
-### Admin access and judge codes
+### Roles, superadmin access and judge codes
+- **Account admin**: whoever signs up. They run their own builder account (websites, tests, reports, payments). Every new account gets this role.
+- **Superadmin**: First Five operators (the founder). Sees the Superadmin area (`/app/admin`): overview, clients, payments, codes, integrations, support actions and view-as-client. There is no in-app way to become one; it's granted only from the server:
 ```bash
-npm run admin:grant-admin:dev -- --email you@example.com
+npm run admin:grant-superadmin:dev -- --email you@example.com            # grant
+npm run admin:grant-superadmin:dev -- --list                             # who has it
+npm run admin:grant-superadmin:dev -- --revoke --email someone@example.com
 npm run admin:codes:dev -- --label "Judges" --audience judge --plan complimentary --count 5 --uses 1 --expires-days 30
 ```
-Or use **/app/admin** once you're an admin. Codes are printed once; only HMAC verifiers are stored.
+Or generate codes in **/app/admin** once you're a superadmin. Codes are printed once; only HMAC verifiers are stored.
 
 ### Reviewing clients (/app/admin/clients)
 - **Clients tab**: every builder account with access, credits left, live payments (sandbox orders shown separately as "test"), websites connected, tests launched, finished attempts, latest report status, last seen and a waitlist marker. Flags highlight stuck builders: no website after `ADMIN_FLAG_NO_WEBSITE_DAYS` (3), website not connected after `ADMIN_FLAG_NOT_CONNECTED_DAYS` (2), 0 attempts `ADMIN_FLAG_NO_ATTEMPTS_HOURS` (48) after launch, report failed, payment awaiting check, no access. Search, filter by flag and access, sort and page.

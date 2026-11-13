@@ -52,7 +52,13 @@ function AccountCard() {
     <Card>
       <CardHeader title="Account" />
       <div className="space-y-4 p-5 sm:p-6">
-        <KeyValue items={[{ label: "Email", value: me?.user.email }, { label: "Member since", value: formatDate(me?.user.createdAt) }]} />
+        <KeyValue
+          items={[
+            { label: "Email", value: me?.user.email },
+            { label: "Role", value: me?.user.role === "superadmin" ? "Superadmin (First Five)" : "Account admin" },
+            { label: "Member since", value: formatDate(me?.user.createdAt) },
+          ]}
+        />
         <form
           className="flex flex-wrap items-end gap-3"
           onSubmit={(ev) => {

@@ -23,15 +23,6 @@ const EnvSchema = z.object({
   DEV_WEB_ORIGIN: optionalString,
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters"),
   LOG_LEVEL: z.string().default("info"),
-  /**
-   * One-time admin bootstrap for hosts without shell access (e.g. Render free plan).
-   * Works only while NO admin exists; remove it after use.
-   */
-  ADMIN_BOOTSTRAP_TOKEN: z
-    .string()
-    .optional()
-    .transform((v) => (v && v.trim() !== "" ? v.trim() : undefined))
-    .refine((v) => v === undefined || v.length >= 24, "ADMIN_BOOTSTRAP_TOKEN must be at least 24 characters"),
 
   // Externally hosted SDK (built in a separate project). Unset ⇒ snippet is a setup preview.
   SDK_SCRIPT_URL: optionalString,

@@ -44,7 +44,7 @@ export interface Entitlement {
 }
 
 export interface MeResponse {
-  user: { id: string; email: string; name: string | null; role: "user" | "admin"; createdAt: string };
+  user: { id: string; email: string; name: string | null; role: "account_admin" | "superadmin"; createdAt: string };
   entitlement: Entitlement;
   /** Set while an admin is viewing the app as this user (read-only). */
   impersonation?: ImpersonationState | null;

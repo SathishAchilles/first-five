@@ -53,10 +53,10 @@ export function computeFlags(c: ClientFlagInput, now: Date, t: FlagThresholds): 
 const isActiveGrant = (g: { revokedAt: Date | null; startsAt: Date; expiresAt: Date | null }, now: Date) =>
   !g.revokedAt && g.startsAt <= now && (!g.expiresAt || g.expiresAt > now);
 
-/** Loads builders (role `user`, optionally one) with everything a row needs. */
+/** Loads builders (role `account_admin`, optionally one) with everything a row needs. */
 async function loadRows(ctx: AppContext, now: Date, onlyUserId?: string): Promise<AdminClientRow[]> {
   const users = await ctx.db.user.findMany({
-    where: { role: "user", ...(onlyUserId ? { id: onlyUserId } : {}) },
+    where: { role: "account_admin", ...(onlyUserId ? { id: onlyUserId } : {}) },
     include: {
       accessGrants: true,
       orders: { select: { status: true, environment: true } },
@@ -155,10 +155,10 @@ export async function listClients(ctx: AppContext, query: AdminClientListQuery, 
   return { clients: rows.slice((page - 1) * pageSize, page * pageSize), page, pageSize, total: rows.length };
 }
 
-/** The builder behind an admin client route; admins and unknown ids are 404. */
+/** The builder behind a superadmin client route; superadmins and unknown ids are 404. */
 export async function assertClient(ctx: AppContext, clientId: string) {
   const user = await ctx.db.user.findUnique({ where: { id: clientId } });
-  if (!user || user.role !== "user") throw new AppError(404, "not_found", "Client not found.");
+  if (!user || user.role !== "account_admin") throw new AppError(404, "not_found", "Client not found.");
   return user;
 }
 

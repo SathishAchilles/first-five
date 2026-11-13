@@ -132,7 +132,7 @@ export const StudyUpdateSchema = StudyDraftSchema.omit({ projectId: true }).part
 
 // ───────────────────────────── Participants ─────────────────────────────
 
-export const CONSENT_TEXT_VERSION = "2026-10-24.v1";
+export const CONSENT_TEXT_VERSION = "2026-11-13.v2";
 
 export const StartAttemptSchema = z.object({ consent: z.literal(true) });
 

@@ -7,6 +7,9 @@ import { recordConversion } from "./conversions";
 
 export const SESSION_COOKIE = "ff_session";
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/** Holds the admin's own session token while they view the app as a client. */
+export const ADMIN_RETURN_COOKIE = "ff_admin_return";
+export const IMPERSONATION_TTL_MS = 30 * 60 * 1000;
 const TOUCH_INTERVAL_MS = 60 * 60 * 1000;
 
 // OWASP-recommended Argon2id parameters (19 MiB, 2 iterations, 1 lane).
@@ -74,16 +77,32 @@ export async function createAuthSession(ctx: AppContext, userId: string, userAge
   return { token, expiresAt };
 }
 
-export async function resolveAuthSession(ctx: AppContext, token: string | undefined) {
+/** A read-only "view as client" session for an admin, with a fixed 30-minute expiry. */
+export async function createImpersonationSession(ctx: AppContext, adminId: string, clientId: string) {
+  const token = randomToken();
+  const expiresAt = new Date(Date.now() + IMPERSONATION_TTL_MS);
+  await ctx.db.authSession.create({
+    data: { userId: clientId, tokenHash: sha256(token), expiresAt, impersonatorUserId: adminId, readOnly: true },
+  });
+  return { token, expiresAt };
+}
+
+export async function resolveAuthSession(
+  ctx: AppContext,
+  token: string | undefined,
+  opts: { onExpired?: (s: { userId: string; impersonatorUserId: string | null }) => void } = {},
+) {
   if (!token || token.length > 200) return null;
   const session = await ctx.db.authSession.findUnique({ where: { tokenHash: sha256(token) }, include: { user: true } });
   if (!session) return null;
   const now = Date.now();
   if (session.expiresAt.getTime() <= now) {
     await ctx.db.authSession.delete({ where: { id: session.id } }).catch(() => undefined);
+    opts.onExpired?.(session);
     return null;
   }
-  if (now - session.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
+  // View-as sessions never slide their expiry and never count as the client's activity.
+  if (!session.readOnly && now - session.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
     await ctx.db.authSession
       .update({ where: { id: session.id }, data: { lastSeenAt: new Date(now), expiresAt: new Date(now + SESSION_TTL_MS) } })
       .catch(() => undefined);

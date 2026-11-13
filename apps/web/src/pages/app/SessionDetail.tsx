@@ -9,9 +9,11 @@ import { api, errorMessage } from "../../lib/api";
 import { formatDateTime, formatDuration } from "../../lib/format";
 import { describeEvent } from "./TestParticipants";
 
-export function SessionDetailPage() {
+/** `apiPath` and `backTo` let the admin client review show the same view through the admin API. */
+export function SessionDetailPage({ apiPath, backTo }: { apiPath?: string; backTo?: string } = {}) {
   const { sessionId, id } = useParams();
-  const q = useQuery({ queryKey: ["session", sessionId], queryFn: () => api<SessionDetail>(`/api/sessions/${sessionId}/details`) });
+  const path = apiPath ?? `/api/sessions/${sessionId}/details`;
+  const q = useQuery({ queryKey: ["session", path], queryFn: () => api<SessionDetail>(path) });
   if (q.isLoading) return <Spinner />;
   if (q.error) return <ErrorState message={errorMessage(q.error)} />;
   const s = q.data!;
@@ -20,8 +22,8 @@ export function SessionDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Link to={`/app/tests/${id}/participants`} className="text-sm text-ink-muted hover:text-ink">
-        ← All participants
+      <Link to={backTo ?? `/app/tests/${id}/participants`} className="text-sm text-ink-muted hover:text-ink">
+        ← {backTo ? "Back to client" : "All participants"}
       </Link>
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-xl font-semibold">{s.participantLabel}</h2>

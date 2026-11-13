@@ -22,11 +22,12 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext) {
       expires: expiresAt,
     });
 
-  const me = async (id: string) => {
+  const me = async (id: string, impersonation: { expiresAt: Date } | null = null) => {
     const user = await ctx.db.user.findUniqueOrThrow({ where: { id } });
     return {
       user: { id: user.id, email: user.email, name: user.name, role: user.role, createdAt: user.createdAt.toISOString() },
       entitlement: await getEntitlement(ctx.db, ctx.config, user.id),
+      impersonation: impersonation ? { clientEmail: user.email, expiresAt: impersonation.expiresAt.toISOString() } : null,
     };
   };
 
@@ -78,7 +79,7 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext) {
     return { ok: true };
   });
 
-  app.get("/api/auth/me", { preHandler: requireUser }, async (req) => me(userId(req)));
+  app.get("/api/auth/me", { preHandler: requireUser }, async (req) => me(userId(req), req.impersonation));
 
   app.patch("/api/account", { preHandler: requireUser }, async (req) => {
     const input = z.object({ name: z.string().trim().max(80) }).parse(req.body);

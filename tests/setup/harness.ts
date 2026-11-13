@@ -194,3 +194,22 @@ export async function startParticipant(app: FastifyInstance, studyPublicId: stri
   const res = await p.post(`/api/public/studies/${studyPublicId}/attempts`, { consent: true });
   return { participant: p, res, attempt: res.statusCode === 201 ? json(res) : null };
 }
+
+/** A participant starts, the SDK records two page views, and the attempt ends (finished or gave up). Returns the session's database id. */
+export async function finishAttempt(h: Harness, project: { publicId: string }, study: { publicId: string }, reachGoal = true) {
+  const p = await startParticipant(h.app, study.publicId);
+  const ex = json(await sdkExchange(h.app, project.publicId, p.attempt.launchUrl));
+  const base = { project_id: project.publicId, mode: "live" as const, study_id: study.publicId, session_id: p.attempt.sessionId };
+  await sdkEvents(h.app, ex.credential, [
+    sdkEvent(base, 0, { event_name: "ff_page_viewed", page_path: "/signup" }),
+    sdkEvent(base, 1, { event_name: "ff_page_viewed", page_path: reachGoal ? "/dashboard" : "/pricing" }),
+  ]);
+  await h.app.inject({
+    method: "POST",
+    url: "/api/sdk/session/end",
+    headers: { origin: SITE, authorization: `Bearer ${ex.credential}` },
+    payload: { reason: reachGoal ? "finished" : "gave_up" },
+  });
+  const session = await h.db.studySession.findFirstOrThrow({ where: { publicId: p.attempt.sessionId } });
+  return session.id;
+}

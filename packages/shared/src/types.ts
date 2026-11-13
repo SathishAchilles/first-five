@@ -46,6 +46,13 @@ export interface Entitlement {
 export interface MeResponse {
   user: { id: string; email: string; name: string | null; role: "user" | "admin"; createdAt: string };
   entitlement: Entitlement;
+  /** Set while an admin is viewing the app as this user (read-only). */
+  impersonation?: ImpersonationState | null;
+}
+
+export interface ImpersonationState {
+  clientEmail: string;
+  expiresAt: string;
 }
 
 export interface ProjectSummary {
@@ -457,4 +464,130 @@ export interface AdminPaymentDto {
   correctable: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+// ───────────────────────────── Admin client review ─────────────────────────────
+
+export type AdminClientFlag = "no_website" | "not_connected" | "no_attempts" | "report_failed" | "payment_pending" | "no_access";
+export type AdminClientSort = "signed_up" | "last_seen" | "attempts";
+
+export interface AdminClientListQuery {
+  q?: string;
+  flags?: AdminClientFlag[];
+  access?: "any" | "active" | "none";
+  sort?: AdminClientSort;
+  dir?: "asc" | "desc";
+  page?: number;
+  pageSize?: number;
+}
+
+export interface AdminClientRow {
+  id: string;
+  email: string;
+  name: string | null;
+  createdAt: string;
+  lastSeenAt: string | null;
+  access: "active" | "none";
+  creditsAvailable: number;
+  livePaidOrders: number;
+  testPaidOrders: number;
+  pendingPayments: number;
+  websites: number;
+  connectedWebsites: number;
+  launchedStudies: number;
+  finishedAttempts: number;
+  latestReportStatus: string | null;
+  waitlistJoinedAt: string | null;
+  flags: AdminClientFlag[];
+}
+
+export interface AdminClientListResponse {
+  clients: AdminClientRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface AdminGrantDto {
+  id: string;
+  source: "invitation_code" | "payment" | "admin";
+  planKey: string;
+  studyCredits: number;
+  creditsUsed: number;
+  maxParticipantsPerStudy: number;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export interface AdminOrderDto {
+  id: string;
+  reference: string;
+  provider: string;
+  environment: "uat" | "live";
+  status: string;
+  amountMinor: number;
+  currency: string;
+  createdAt: string;
+}
+
+export interface AdminWebsiteDto {
+  id: string;
+  name: string;
+  websiteUrl: string;
+  integrationStatus: IntegrationStatus;
+  lastSdkVersion: string | null;
+  lastIssue: string | null;
+  lastIssueAt: string | null;
+  createdAt: string;
+}
+
+export interface AdminStudyDto {
+  id: string;
+  projectId: string;
+  name: string;
+  status: string;
+  currentVersion: number;
+  participantLimit: number;
+  launchedAt: string | null;
+  expiresAt: string | null;
+  finishedAttempts: number;
+  latestReport: { id: string; status: string; source: string; sessionsIncluded: number | null; failureReason: string | null } | null;
+}
+
+export interface AdminReportDto {
+  id: string;
+  studyId: string;
+  source: string;
+  status: string;
+  title: string;
+  sessionsIncluded: number | null;
+  failureReason: string | null;
+  createdAt: string;
+}
+
+export interface AdminAuditDto {
+  id: string;
+  actorEmail: string | null;
+  actorType: string;
+  action: string;
+  resourceType: string;
+  resourceId: string | null;
+  metadata: unknown;
+  createdAt: string;
+}
+
+export interface AdminClientDetail {
+  client: AdminClientRow;
+  grants: AdminGrantDto[];
+  orders: AdminOrderDto[];
+  websites: AdminWebsiteDto[];
+  studies: AdminStudyDto[];
+  reports: AdminReportDto[];
+  audit: AdminAuditDto[];
+}
+
+/** Every support action carries a written reason (1–500 characters). */
+export interface AdminSupportActionInput {
+  reason: string;
 }

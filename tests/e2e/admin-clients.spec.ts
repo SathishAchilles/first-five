@@ -7,11 +7,11 @@ test("admin reviews a client, views as them read-only, and stops", async ({ brow
   const builderPage = await (await browser.newContext({ baseURL })).newPage();
   const builderEmail = await signUp(builderPage);
 
-  // The admin signs up normally and is promoted, as the grant-admin CLI does.
+  // The superadmin signs up normally and is promoted, as the grant-superadmin CLI does.
   const page = await (await browser.newContext({ baseURL })).newPage();
   const adminEmail = await signUp(page);
   const db = new PrismaClient({ datasourceUrl: process.env.E2E_DATABASE_URL });
-  await db.user.update({ where: { email: adminEmail }, data: { role: "admin" } });
+  await db.user.update({ where: { email: adminEmail }, data: { role: "superadmin" } });
   await db.$disconnect();
 
   await page.goto("/app/admin/clients");

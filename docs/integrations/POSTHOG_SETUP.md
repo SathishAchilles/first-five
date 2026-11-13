@@ -25,7 +25,7 @@ PostHog → **Project settings → General**: project token (`phc_`), project ID
 Render dashboard → service **first-five** → **Environment** → add the variables → **Save, rebuild and deploy**. Never commit keys to Git or paste them in chat; the browser never receives them.
 
 ## 5. How to test
-1. Log in as an admin (`npm run admin:grant-admin -- --email you@…` in the Render shell).
+1. Log in as a superadmin (`npm run admin:grant-superadmin -- --email you@…`).
 2. Open **/app/admin → Integrations → PostHog → Run verification**.
 3. The server sends one `ff_integration_check` event, then queries it back with HogQL.
 

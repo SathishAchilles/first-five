@@ -48,13 +48,10 @@ Render deploys Blueprints from a Git repository.
 1. Push this repository to GitHub (private is fine; install the Render GitHub app for that repo).
 2. Render Dashboard → **New → Blueprint** → select the repo → review the two free resources → **Apply**.
 3. Wait for the first deploy, then open `https://<service>.onrender.com/readyz` — it should return `{"status":"ready","database":"ok"}`.
-4. Create your account on the site, then make yourself an admin.
-
-   **Free plan (no Shell):** set an `ADMIN_BOOTSTRAP_TOKEN` environment variable (24+ random characters), redeploy, sign in, open `/admin-setup` and enter the token. It works only while no admin exists. Delete the variable afterwards.
-
-   **Paid plan:** from **Shell** in the Render dashboard:
+4. Create your account on the site, then make yourself a superadmin. There is no in-app way to do this; run the CLI against the production database, from **Shell** in the Render dashboard (paid plan) or from your machine with the external `DATABASE_URL`:
    ```bash
-   npm run admin:grant-admin -- --email you@example.com
+   npm run admin:grant-superadmin -- --email you@example.com
+   npm run admin:grant-superadmin -- --list
    ```
 5. Generate judge codes (or use **/app/admin → Invitation codes**):
    ```bash

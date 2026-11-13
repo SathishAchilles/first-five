@@ -578,7 +578,7 @@ async function serveStubMode() {
   process.on("SIGINT", close);
   process.on("SIGTERM", close);
   const me = await h.builder.ok("GET", "/api/auth/me");
-  await h.db.user.updateMany({ where: { email: me.user?.email ?? me.email }, data: { role: "admin" } });
+  await h.db.user.updateMany({ where: { email: me.user?.email ?? me.email }, data: { role: "superadmin" } });
   for (const j of JOURNEYS.slice(0, 3)) await participantWithFeedback(h, j);
   const ready = await waitForReport(h, (await h.builder.ok("POST", `/api/studies/${h.study.id}/analyze`)).id);
   for (const j of JOURNEYS.slice(3, 5)) await participantWithFeedback(h, j);
@@ -663,7 +663,7 @@ async function liveMode() {
     console.log("      run usage:", JSON.stringify(((await h.db.agentRun.findUniqueOrThrow({ where: { id: run.agentRunId! } })).details as any).usage));
 
     const me = await h.builder.ok("GET", "/api/auth/me");
-    await h.db.user.updateMany({ where: { email: me.user?.email ?? me.email }, data: { role: "admin" } });
+    await h.db.user.updateMany({ where: { email: me.user?.email ?? me.email }, data: { role: "superadmin" } });
     const verify = await h.builder.ok("POST", "/api/admin/integrations/ux_director/verify");
     const status = (await h.builder.ok("GET", "/api/admin/integrations")) as any;
     const card = (status.providers ?? status).find((p: any) => p.provider === "ux_director");

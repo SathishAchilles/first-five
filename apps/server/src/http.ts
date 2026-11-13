@@ -16,9 +16,10 @@ export async function requireUser(req: FastifyRequest) {
   if (!req.user) throw new AppError(401, "unauthenticated", "Please log in to continue.");
 }
 
-export async function requireAdmin(req: FastifyRequest) {
+/** First Five operators only. Account admins (builders) get 404 so the surface isn't advertised. */
+export async function requireSuperadmin(req: FastifyRequest) {
   if (!req.user) throw new AppError(401, "unauthenticated", "Please log in to continue.");
-  if (req.user.role !== "admin") throw new AppError(404, "not_found", "Not found.");
+  if (req.user.role !== "superadmin") throw new AppError(404, "not_found", "Not found.");
 }
 
 export function userId(req: FastifyRequest): string {

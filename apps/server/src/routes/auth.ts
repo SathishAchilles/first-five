@@ -100,27 +100,6 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext) {
     },
   );
 
-  /**
-   * One-time operator bootstrap: a signed-in user who knows ADMIN_BOOTSTRAP_TOKEN becomes the first admin.
-   * Disabled when the token isn't configured or any admin already exists.
-   */
-  app.post(
-    "/api/admin-bootstrap",
-    { preHandler: requireUser, config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } },
-    async (req) => {
-      const { token } = z.object({ token: z.string().min(1).max(200) }).parse(req.body);
-      const expected = ctx.config.ADMIN_BOOTSTRAP_TOKEN;
-      if (!expected) throw new AppError(404, "not_found", "Admin setup isn't enabled on this server.");
-      if ((await ctx.db.user.count({ where: { role: "admin" } })) > 0) {
-        throw new AppError(409, "already_configured", "An admin already exists. This setup link is no longer active.");
-      }
-      if (!safeEqualHex(sha256(token), sha256(expected))) throw new AppError(403, "invalid_token", "That setup token isn't correct.");
-      await ctx.db.user.update({ where: { id: userId(req) }, data: { role: "admin" } });
-      await audit(ctx.db, { actorUserId: userId(req), actorType: "user", action: "user.admin_bootstrapped", resourceType: "user", resourceId: userId(req) });
-      return me(userId(req));
-    },
-  );
-
   app.get("/api/billing/offer", async () => ({ offer: paidOffer(ctx) }));
 
   app.post("/api/payments/checkout", { preHandler: requireUser, config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (req) => {

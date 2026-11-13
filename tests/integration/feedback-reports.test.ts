@@ -222,7 +222,7 @@ describe("payments and provider status", () => {
 
   it("lists integrations as not configured, and verifies Postgres with a real query", async () => {
     const { client, email } = await signupWithAccess(h);
-    await h.db.user.update({ where: { email }, data: { role: "admin" } });
+    await h.db.user.update({ where: { email }, data: { role: "superadmin" } });
     const list = json(await client.get("/api/admin/integrations")).providers;
     const status = Object.fromEntries(list.map((p: { provider: string; status: string }) => [p.provider, p.status]));
     expect(status).toMatchObject({ sdk: "not_configured", posthog: "not_configured", agenticorg: "not_configured", pinelabs: "not_configured", postgres: "configured" });

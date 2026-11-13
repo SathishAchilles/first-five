@@ -119,8 +119,9 @@ export async function signupWithAccess(h: Harness, opts: { studyCredits?: number
   return { ...s, me: json(res) };
 }
 
-export async function makeAdmin(db: Db, email: string) {
-  await db.user.update({ where: { email }, data: { role: "admin" } });
+/** Superadmins are granted only by the CLI; tests set the role directly the same way. */
+export async function makeSuperadmin(db: Db, email: string) {
+  await db.user.update({ where: { email }, data: { role: "superadmin" } });
 }
 
 // ───────────────────────────── SDK contract fixtures ─────────────────────────────

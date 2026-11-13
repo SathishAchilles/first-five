@@ -36,7 +36,7 @@ const FUNNEL_ORDER = [
 export function AdminLayout() {
   return (
     <div className="space-y-6">
-      <PageHeader title="Internal admin" description="Visible only to First Five operators. Credentials are never shown here." />
+      <PageHeader title="Superadmin" description="First Five operators only. Credentials are never shown here." />
       <Tabs
         tabs={[
           { to: "/app/admin", label: "Overview", end: true },

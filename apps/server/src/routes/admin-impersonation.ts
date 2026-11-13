@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import type { AppContext } from "../context";
-import { requireAdmin, userId } from "../http";
+import { requireSuperadmin, userId } from "../http";
 import { audit } from "../lib/audit";
 import { AppError } from "../lib/errors";
 import { ADMIN_RETURN_COOKIE, createImpersonationSession, destroyAuthSession, resolveAuthSession, SESSION_COOKIE, SESSION_TTL_MS } from "../services/auth";
@@ -13,11 +13,11 @@ export async function adminImpersonationRoutes(app: FastifyInstance, ctx: AppCon
   const cookie = (reply: FastifyReply, name: string, value: string, expires: Date) =>
     reply.setCookie(name, value, { httpOnly: true, secure: ctx.config.secureCookies, sameSite: "lax", path: "/", expires });
 
-  app.post("/api/admin/impersonation", { preHandler: requireAdmin }, async (req, reply) => {
+  app.post("/api/admin/impersonation", { preHandler: requireSuperadmin }, async (req, reply) => {
     const input = StartBody.parse(req.body);
     const target = await ctx.db.user.findUnique({ where: { id: input.userId } });
     if (!target) throw new AppError(404, "not_found", "Client not found.");
-    if (target.role !== "user") throw new AppError(403, "cannot_impersonate_admin", "Admin accounts can't be viewed as a client.");
+    if (target.role !== "account_admin") throw new AppError(403, "cannot_impersonate_superadmin", "Superadmin accounts can't be viewed as a client.");
     const adminId = userId(req);
     const session = await createImpersonationSession(ctx, adminId, target.id);
     await audit(ctx.db, {

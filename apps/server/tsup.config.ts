@@ -4,7 +4,7 @@ export default defineConfig({
   entry: {
     index: "src/index.ts",
     "cli/generate-codes": "src/cli/generate-codes.ts",
-    "cli/grant-admin": "src/cli/grant-admin.ts",
+    "cli/grant-superadmin": "src/cli/grant-superadmin.ts",
     "cli/sweep": "src/cli/sweep.ts",
   },
   format: ["esm"],

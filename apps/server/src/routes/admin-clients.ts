@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { AppContext } from "../context";
-import { requireAdmin, userId } from "../http";
+import { requireSuperadmin, userId } from "../http";
 import { audit } from "../lib/audit";
 import { assertClient, getClientDetail, listClients } from "../services/admin-clients";
 import * as support from "../services/admin-support";
@@ -35,7 +35,7 @@ const GrantParam = ClientParam.extend({ grantId: z.string().uuid() });
  * called with the client's id, so the admin sees exactly what the builder sees.
  */
 export async function adminClientRoutes(app: FastifyInstance, ctx: AppContext) {
-  app.addHook("preHandler", requireAdmin);
+  app.addHook("preHandler", requireSuperadmin);
 
   app.get("/api/admin/clients", async (req) => listClients(ctx, ListQuery.parse(req.query)));
 

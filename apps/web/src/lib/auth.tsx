@@ -53,12 +53,12 @@ export function useAuth(): AuthValue {
   return v;
 }
 
-export function RequireAuth({ children, admin = false }: { children: ReactNode; admin?: boolean }) {
+export function RequireAuth({ children, superadmin = false }: { children: ReactNode; superadmin?: boolean }) {
   const { me, loading } = useAuth();
   const location = useLocation();
   if (loading) return <FullPageSpinner />;
   if (!me) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
-  if (admin && me.user.role !== "admin") return <Navigate to="/app" replace />;
+  if (superadmin && me.user.role !== "superadmin") return <Navigate to="/app" replace />;
   return <>{children}</>;
 }
 
@@ -66,7 +66,7 @@ export function RequireAuth({ children, admin = false }: { children: ReactNode; 
 export function RequireAccess({ children }: { children: ReactNode }) {
   const { me } = useAuth();
   const location = useLocation();
-  if (me && me.entitlement.status === "none" && me.user.role !== "admin") {
+  if (me && me.entitlement.status === "none" && me.user.role !== "superadmin") {
     return <Navigate to="/access" replace state={{ from: location.pathname }} />;
   }
   return <>{children}</>;

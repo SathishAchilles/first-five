@@ -2,16 +2,16 @@ import type { FastifyInstance } from "fastify";
 import { GenerateCodesSchema } from "@firstfive/shared";
 import { z } from "zod";
 import type { AppContext } from "../context";
-import { requireAdmin, userId } from "../http";
+import { requireSuperadmin, userId } from "../http";
 import { listProviderStatuses, PROVIDER_KEYS, verifyProvider } from "../integrations/registry";
 import { disableCode, generateCodes, toCodeDto } from "../services/access-codes";
 import { audit } from "../lib/audit";
 import { runMaintenance } from "../services/maintenance";
 import { confirmUpiPayment, listPaymentsForAdmin, rejectUpiPayment } from "../services/upi";
 
-/** Internal admin API. Non-admins receive 404 so the surface isn't advertised. */
+/** Superadmin API. Everyone else receives 404 so the surface isn't advertised. */
 export async function adminRoutes(app: FastifyInstance, ctx: AppContext) {
-  app.addHook("preHandler", requireAdmin);
+  app.addHook("preHandler", requireSuperadmin);
 
   app.get("/api/admin/integrations", async () => ({ providers: await listProviderStatuses(ctx.config, ctx.db) }));
 
@@ -59,8 +59,8 @@ export async function adminRoutes(app: FastifyInstance, ctx: AppContext) {
     // and sandbox (UAT) payments are never counted as revenue.
     const [leads, accounts, entitledAccounts, redeemedCodes, uatPaid, livePaid, projects, connected, launchedStudies, attempts, finalized, feedback, published] = await Promise.all([
       ctx.db.waitlistLead.count(),
-      ctx.db.user.count({ where: { role: "user" } }),
-      ctx.db.user.count({ where: { role: "user", accessGrants: { some: { revokedAt: null } } } }),
+      ctx.db.user.count({ where: { role: "account_admin" } }),
+      ctx.db.user.count({ where: { role: "account_admin", accessGrants: { some: { revokedAt: null } } } }),
       ctx.db.invitationCodeRedemption.count(),
       ctx.db.order.count({ where: { environment: "uat", status: "paid_verified" } }),
       ctx.db.order.count({ where: { environment: "live", status: "paid_verified" } }),

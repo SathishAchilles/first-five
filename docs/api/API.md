@@ -75,7 +75,7 @@ All workspace routes (`/api/projects…`, `/api/studies…`, `/api/reports…`, 
 | POST | `/api/public/studies/:publicId/attempt/end` | `{ reason }` — fallback controls on the First Five tab |
 | GET/POST | `/api/public/studies/:publicId/feedback` | Header `x-ff-feedback: <handoff>` |
 
-## Admin (role = admin; others get 404)
+## Superadmin (role = superadmin; everyone else gets 404)
 | Method | Path |
 |---|---|
 | GET | `/api/admin/overview` |

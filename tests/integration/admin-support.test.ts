@@ -7,7 +7,7 @@ import {
   finishAttempt,
   json,
   launchedStudy,
-  makeAdmin,
+  makeSuperadmin,
   resetDb,
   signup,
   signupWithAccess,
@@ -26,7 +26,7 @@ beforeAll(async () => {
   h = await createHarness();
   await resetDb(h.db);
   const a = await signup(h.app);
-  await makeAdmin(h.db, a.email);
+  await makeSuperadmin(h.db, a.email);
   admin = a.client;
 });
 afterAll(async () => {

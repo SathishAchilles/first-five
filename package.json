@@ -27,10 +27,10 @@
     "test:integration": "vitest run --project integration",
     "test:e2e": "playwright test",
     "admin:codes": "node apps/server/dist/cli/generate-codes.js",
-    "admin:grant-admin": "node apps/server/dist/cli/grant-admin.js",
+    "admin:grant-superadmin": "node apps/server/dist/cli/grant-superadmin.js",
     "admin:sweep": "node apps/server/dist/cli/sweep.js",
     "admin:codes:dev": "tsx apps/server/src/cli/generate-codes.ts",
-    "admin:grant-admin:dev": "tsx apps/server/src/cli/grant-admin.ts"
+    "admin:grant-superadmin:dev": "tsx apps/server/src/cli/grant-superadmin.ts"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"

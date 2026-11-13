@@ -41,6 +41,10 @@ const EnvSchema = z.object({
   PAID_STUDY_CURRENCY: z.string().default("INR"),
   PAID_STUDY_CREDITS: int(1),
   PAID_PARTICIPANT_CAP: int(5),
+  /** Admin client review: when a builder is flagged as stuck. */
+  ADMIN_FLAG_NO_WEBSITE_DAYS: int(3),
+  ADMIN_FLAG_NOT_CONNECTED_DAYS: int(2),
+  ADMIN_FLAG_NO_ATTEMPTS_HOURS: int(48),
   /** Live/sandbox checkout opens ONLY when this is true AND Pine Labs is implemented + configured. */
   PAYMENTS_ENABLED: bool,
   /**

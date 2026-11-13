@@ -7,6 +7,8 @@ declare module "fastify" {
   interface FastifyRequest {
     user: User | null;
     authToken: string | undefined;
+    /** Set while an admin views the app as this user; every write is refused. */
+    impersonation: { adminId: string; expiresAt: Date } | null;
   }
 }
 

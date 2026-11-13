@@ -124,6 +124,7 @@ export function StudyWelcomePage() {
             <li>We never record what you type into fields, passwords or payment details.</li>
             <li>Afterwards we'll ask three short questions. You can skip any of them.</li>
             <li>You're identified only as an anonymous participant number. You can withdraw at any time.</li>
+            <li>The person who invited you sees your session. First Five staff may also view it to support them and check report quality.</li>
           </ul>
         </div>
 

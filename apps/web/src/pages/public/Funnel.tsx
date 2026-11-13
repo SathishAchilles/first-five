@@ -655,7 +655,8 @@ export function PrivacyPage() {
       <p>
         <strong>Test participants:</strong> only while someone is doing a task they agreed to, the pages they visit and the buttons and links they click on the website
         being tested, plus any answers they choose to give afterwards. Participants are identified by an anonymous number. We never record what is typed into
-        fields, passwords, or payment details.
+        fields, passwords, or payment details. The builder who invited them sees their session, and First Five staff may view it to support that builder and check
+        report quality.
       </p>
       <p>
         <strong>Site usage:</strong> a random visitor identifier stored in a first-party cookie to count page views and button clicks on this site. No third-party

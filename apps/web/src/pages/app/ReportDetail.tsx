@@ -18,12 +18,13 @@ interface Quote {
   text: string;
 }
 
-export function ReportDetailPage() {
+/** `readOnly` (admin client review) hides every review, publish and edit control. */
+export function ReportDetailPage({ apiPath, readOnly = false, backTo, sessionLinkBase }: { apiPath?: string; readOnly?: boolean; backTo?: string; sessionLinkBase?: string } = {}) {
   const { id } = useParams();
   const qc = useQueryClient();
   const q = useQuery({
-    queryKey: ["report", id],
-    queryFn: () => api<ReportDetail>(`/api/reports/${id}`),
+    queryKey: ["report", apiPath ?? id],
+    queryFn: () => api<ReportDetail>(apiPath ?? `/api/reports/${id}`),
     // UX Director runs finish in the background; poll until the scored report is ready.
     refetchInterval: (query) => (query.state.data?.status === "processing" ? 5000 : false),
   });
@@ -45,13 +46,13 @@ export function ReportDetailPage() {
   if (q.isLoading) return <Spinner />;
   if (q.error) return <ErrorState message={errorMessage(q.error)} onRetry={() => q.refetch()} />;
   const r = q.data!;
-  const editable = r.source === "owner" && (r.status === "draft" || r.status === "revision_requested");
+  const editable = !readOnly && r.source === "owner" && (r.status === "draft" || r.status === "revision_requested");
 
   return (
     <div className="space-y-6">
       <div>
-        <Link to={`/app/tests/${r.studyId}/findings`} className="text-sm text-ink-muted hover:text-ink">
-          ← {r.studyName}
+        <Link to={backTo ?? `/app/tests/${r.studyId}/findings`} className="text-sm text-ink-muted hover:text-ink">
+          ← {backTo ? "Back to client" : r.studyName}
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">{r.title}</h1>
@@ -64,7 +65,7 @@ export function ReportDetailPage() {
         </p>
       </div>
 
-      {r.source === "owner" ? (
+      {readOnly ? null : r.source === "owner" ? (
         <ReviewPanel r={r} note={note} setNote={setNote} run={(path, body) => action.mutate({ path, body })} pending={action.isPending} />
       ) : (
         <PublishPanel r={r} run={(path) => action.mutate({ path })} pending={action.isPending} />
@@ -131,7 +132,7 @@ export function ReportDetailPage() {
                             {f.supportingSessions.map((s, j) => (
                               <span key={s.id}>
                                 {j > 0 && ", "}
-                                <Link to={`/app/tests/${r.studyId}/participants/${s.id}`} className="text-accent hover:underline">
+                                <Link to={sessionLinkBase ? `${sessionLinkBase}/${s.id}` : `/app/tests/${r.studyId}/participants/${s.id}`} className="text-accent hover:underline">
                                   {s.label}
                                 </Link>
                               </span>

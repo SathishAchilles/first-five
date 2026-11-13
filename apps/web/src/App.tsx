@@ -2,7 +2,11 @@ import { useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppLayout, MarketingLayout } from "./components/layouts";
 import { RequireAccess, RequireAuth } from "./lib/auth";
-import { AdminPage } from "./pages/app/Admin";
+import { ImpersonationBanner } from "./components/ImpersonationBanner";
+import { AdminLayout, CodesCard, IntegrationsCard, OverviewCard, PaymentsCard } from "./pages/app/Admin";
+import { AdminClientDetailPage } from "./pages/app/admin/ClientDetail";
+import { AdminClientsPage } from "./pages/app/admin/Clients";
+import { AdminReportPage, AdminSessionPage } from "./pages/app/admin/ClientViews";
 import { NewTestPage } from "./pages/app/NewTest";
 import { NewWebsitePage } from "./pages/app/NewWebsite";
 import { ReportDetailPage } from "./pages/app/ReportDetail";
@@ -42,6 +46,7 @@ export function App() {
   return (
     <>
     <ScrollToTop />
+    <ImpersonationBanner />
     <Routes>
       <Route element={<MarketingLayout />}>
         <Route path="/" element={<LandingPage />} />
@@ -93,10 +98,19 @@ export function App() {
           path="admin"
           element={
             <RequireAuth admin>
-              <AdminPage />
+              <AdminLayout />
             </RequireAuth>
           }
-        />
+        >
+          <Route index element={<OverviewCard />} />
+          <Route path="clients" element={<AdminClientsPage />} />
+          <Route path="clients/:clientId" element={<AdminClientDetailPage />} />
+          <Route path="clients/:clientId/sessions/:sessionId" element={<AdminSessionPage />} />
+          <Route path="clients/:clientId/reports/:reportId" element={<AdminReportPage />} />
+          <Route path="payments" element={<PaymentsCard />} />
+          <Route path="codes" element={<CodesCard />} />
+          <Route path="integrations" element={<IntegrationsCard />} />
+        </Route>
       </Route>
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

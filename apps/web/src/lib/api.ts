@@ -11,6 +11,8 @@ export class ApiError extends Error {
 
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
+export const READ_ONLY_EVENT = "ff:read-only-view";
+
 export async function api<T>(path: string, opts: { method?: Method; body?: unknown; headers?: Record<string, string> } = {}): Promise<T> {
   let res: Response;
   try {
@@ -38,6 +40,8 @@ export async function api<T>(path: string, opts: { method?: Method; body?: unkno
   }
   if (!res.ok) {
     const err = (data as { error?: { code?: string; message?: string; fields?: Record<string, string> } } | null)?.error;
+    // Writes are refused while an admin views the app as a client; the banner tells them why.
+    if (err?.code === "read_only_view") window.dispatchEvent(new CustomEvent(READ_ONLY_EVENT, { detail: err.message }));
     throw new ApiError(res.status, err?.code ?? "error", err?.message ?? "Something went wrong. Please try again.", err?.fields);
   }
   return data as T;

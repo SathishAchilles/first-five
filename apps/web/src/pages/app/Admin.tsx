@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, RefreshCw } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { ProviderBadge } from "../../components/status";
-import { Alert, Button, Card, CardHeader, CodeBlock, CopyButton, ErrorState, Field, Input, PageHeader, Pill, Select, Spinner } from "../../components/ui";
+import { Outlet } from "react-router-dom";
+import { Alert, Button, Card, CardHeader, CodeBlock, CopyButton, ErrorState, Field, Input, PageHeader, Pill, Select, Spinner, Tabs } from "../../components/ui";
 import { api, errorMessage, post } from "../../lib/api";
 import { formatDate, formatDateTime } from "../../lib/format";
 
@@ -32,19 +33,25 @@ const FUNNEL_ORDER = [
   "study_launched",
 ];
 
-export function AdminPage() {
+export function AdminLayout() {
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader title="Internal admin" description="Visible only to First Five operators. Credentials are never shown here." />
-      <OverviewCard />
-      <PaymentsCard />
-      <IntegrationsCard />
-      <CodesCard />
+      <Tabs
+        tabs={[
+          { to: "/app/admin", label: "Overview", end: true },
+          { to: "/app/admin/clients", label: "Clients" },
+          { to: "/app/admin/payments", label: "Payments" },
+          { to: "/app/admin/codes", label: "Codes" },
+          { to: "/app/admin/integrations", label: "Integrations" },
+        ]}
+      />
+      <Outlet />
     </div>
   );
 }
 
-function OverviewCard() {
+export function OverviewCard() {
   const q = useQuery({ queryKey: ["admin-overview"], queryFn: () => api<Overview>("/api/admin/overview") });
   if (q.isLoading) return <Spinner />;
   if (q.error) return <ErrorState message={errorMessage(q.error)} />;
@@ -114,7 +121,7 @@ function OverviewCard() {
   );
 }
 
-function PaymentsCard() {
+export function PaymentsCard() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["admin-payments"], queryFn: () => api<{ payments: AdminPaymentDto[] }>("/api/admin/payments"), refetchInterval: 60_000 });
   const act = useMutation({
@@ -207,7 +214,7 @@ function PaymentsCard() {
   );
 }
 
-function IntegrationsCard() {
+export function IntegrationsCard() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["admin-integrations"], queryFn: () => api<{ providers: ProviderStatusDto[] }>("/api/admin/integrations") });
   const [message, setMessage] = useState<{ provider: string; text: string; ok: boolean } | null>(null);
@@ -274,7 +281,7 @@ function UsageLine({ usage: u }: { usage: Record<string, number> }) {
   );
 }
 
-function CodesCard() {
+export function CodesCard() {
   const qc = useQueryClient();
   const list = useQuery({ queryKey: ["admin-codes"], queryFn: () => api<{ codes: InvitationCodeDto[] }>("/api/admin/codes") });
   const [label, setLabel] = useState("");

@@ -250,3 +250,4 @@ export function ParticipantLayout({ children }: { children: ReactNode }) {
     </div>
   );
 }
+

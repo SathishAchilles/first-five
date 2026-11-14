@@ -338,8 +338,10 @@ export async function readAnalyticsSnapshot(ctx: AppContext, studyId: string, ve
 
 /** Start a refresh without blocking the caller. */
 export function refreshInBackground(ctx: AppContext, studyId: string, version: number): void {
-  void refreshAnalyticsSnapshot(ctx, studyId, version).catch((err: Error) =>
-    ctx.log.warn({ err: err.message, studyId, version }, "analytics snapshot refresh crashed"),
+  ctx.defer(
+    refreshAnalyticsSnapshot(ctx, studyId, version).catch((err: Error) =>
+      ctx.log.warn({ err: err.message, studyId, version }, "analytics snapshot refresh crashed"),
+    ),
   );
 }
 

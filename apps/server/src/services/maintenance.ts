@@ -60,6 +60,7 @@ export function scheduleOutboxDispatch(ctx: AppContext) {
         scheduleOutboxDispatch(ctx);
       }
     });
+  ctx.defer(dispatching);
 }
 
 /** Retention and housekeeping. */

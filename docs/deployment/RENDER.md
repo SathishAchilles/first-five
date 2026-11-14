@@ -1,5 +1,7 @@
 # Deploying First Five on Render
 
+> **Superseded by [VERCEL.md](VERCEL.md).** First Five now runs on Vercel with its data in Supabase. This guide is kept for rollback until the Render database expires on 2026-11-23.
+
 ## What gets created (`render.yaml`)
 
 | Resource | Plan | Notes |

@@ -6,7 +6,7 @@ import { Link, useParams } from "react-router-dom";
 import { Alert, Button, Card, CardHeader, ErrorState, Field, Input, KeyValue, Pill, Spinner, Textarea } from "../../../components/ui";
 import { api, errorMessage, post } from "../../../lib/api";
 import { formatDate, formatDateTime, timeAgo } from "../../../lib/format";
-import { FlagPill } from "./Clients";
+import { FlagPill, shownFlags } from "./Clients";
 
 type ActionKind = "grant" | "view" | "website";
 
@@ -32,9 +32,9 @@ export function AdminClientDetailPage() {
             {c.name ? `${c.name} · ` : ""}Signed up {formatDate(c.createdAt)} · Last seen {c.lastSeenAt ? timeAgo(c.lastSeenAt) : "never"}
             {c.waitlistJoinedAt && ` · On waitlist since ${formatDate(c.waitlistJoinedAt)}`}
           </p>
-          {c.flags.length > 0 && (
+          {shownFlags(c.flags).length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
-              {c.flags.map((f) => (
+              {shownFlags(c.flags).map((f) => (
                 <FlagPill key={f} flag={f} />
               ))}
             </div>

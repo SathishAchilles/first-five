@@ -82,6 +82,11 @@ export async function adminClientRoutes(app: FastifyInstance, ctx: AppContext) {
     return reply.status(201).send(await support.grantAccess(ctx, userId(req), p.id, req.body));
   });
 
+  app.post("/api/admin/clients/:id/websites", async (req, reply) => {
+    const p = ClientParam.parse(req.params);
+    return reply.status(201).send(await support.addWebsite(ctx, userId(req), p.id, req.body));
+  });
+
   app.post("/api/admin/clients/:id/grants/:grantId/revoke", async (req) => {
     const p = GrantParam.parse(req.params);
     return support.revokeGrant(ctx, userId(req), p.id, p.grantId, req.body);

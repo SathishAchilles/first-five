@@ -8,7 +8,7 @@ import { api, errorMessage, post } from "../../../lib/api";
 import { formatDate, formatDateTime, timeAgo } from "../../../lib/format";
 import { FlagPill } from "./Clients";
 
-type ActionKind = "grant" | "view";
+type ActionKind = "grant" | "view" | "website";
 
 export function AdminClientDetailPage() {
   const { clientId } = useParams();
@@ -95,7 +95,29 @@ export function AdminClientDetailPage() {
       </Card>
 
       <Card>
-        <CardHeader title="Websites" />
+        <CardHeader
+          title="Websites"
+          action={
+            <Button size="sm" variant="secondary" onClick={() => setOpen(open === "website" ? null : "website")}>
+              Add website
+            </Button>
+          }
+        />
+        {open === "website" && (
+          <div className="mb-4">
+            <ActionForm
+              title="Add a website for this client"
+              path={`/api/admin/clients/${c.id}/websites`}
+              clientId={c.id}
+              onDone={() => setOpen(null)}
+              fields={[
+                { name: "name", label: "Website name", type: "text", initial: "" },
+                { name: "websiteUrl", label: "Website address", type: "url", initial: "https://" },
+              ]}
+            />
+            <p className="mt-2 text-xs text-ink-muted">The client still installs the snippet on their site to connect it.</p>
+          </div>
+        )}
         {d.websites.length === 0 ? (
           <p className="text-sm text-ink-muted">No websites.</p>
         ) : (
@@ -284,7 +306,7 @@ function StudyBlock({ clientId, s }: { clientId: string; s: AdminStudyDto }) {
 interface FieldDef {
   name: string;
   label: string;
-  type: "number" | "date";
+  type: "number" | "date" | "text" | "url";
   initial: string;
 }
 
@@ -299,7 +321,7 @@ function ActionForm({ title, path, clientId, fields, onDone }: { title: string; 
       for (const f of fields) {
         const v = values[f.name]?.trim();
         if (!v) continue;
-        body[f.name] = f.type === "date" ? new Date(`${v}T23:59:00`).toISOString() : Number(v);
+        body[f.name] = f.type === "date" ? new Date(`${v}T23:59:00`).toISOString() : f.type === "number" ? Number(v) : v;
       }
       return post(path, body);
     },

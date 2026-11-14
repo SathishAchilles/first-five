@@ -9,14 +9,16 @@ import { formatDate, timeAgo } from "../../../lib/format";
 
 export const FLAG_LABELS: Record<AdminClientFlag, string> = {
   no_website: "No website",
-  not_connected: "Website not connected",
+  not_connected: "Connection issue",
   no_attempts: "0 attempts after 48h",
   report_failed: "Report failed",
   payment_pending: "Payment awaiting check",
   no_access: "No access",
 };
 
-const FLAGS = Object.keys(FLAG_LABELS) as AdminClientFlag[];
+/** Flags shown in the list, detail and filter. "No website" is computed but not highlighted. */
+export const SHOWN_FLAGS: AdminClientFlag[] = (Object.keys(FLAG_LABELS) as AdminClientFlag[]).filter((f) => f !== "no_website");
+export const shownFlags = (flags: AdminClientFlag[]) => flags.filter((f) => SHOWN_FLAGS.includes(f));
 
 export function FlagPill({ flag }: { flag: AdminClientFlag }) {
   return (
@@ -65,7 +67,7 @@ export function AdminClientsPage() {
         </Select>
       </div>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by flag">
-        {FLAGS.map((f) => (
+        {SHOWN_FLAGS.map((f) => (
           <button
             key={f}
             type="button"
@@ -147,9 +149,9 @@ function ClientRow({ c }: { c: AdminClientRow }) {
         </Link>
         {c.name && <div className="text-xs text-ink-muted">{c.name}</div>}
         {c.waitlistJoinedAt && <div className="text-xs text-ink-muted">On waitlist since {formatDate(c.waitlistJoinedAt)}</div>}
-        {c.flags.length > 0 && (
+        {shownFlags(c.flags).length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
-            {c.flags.map((f) => (
+            {shownFlags(c.flags).map((f) => (
               <FlagPill key={f} flag={f} />
             ))}
           </div>

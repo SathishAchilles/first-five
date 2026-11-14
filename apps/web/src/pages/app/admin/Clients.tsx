@@ -170,9 +170,7 @@ function ClientRow({ c }: { c: AdminClientRow }) {
         {c.livePaidOrders}
         {c.testPaidOrders > 0 && <div className="text-xs text-ink-muted">{c.testPaidOrders} test</div>}
       </td>
-      <td className="px-3 py-3 text-right">
-        {c.connectedWebsites}/{c.websites}
-      </td>
+      <td className="px-3 py-3 text-right whitespace-nowrap">{c.websites === 0 ? "—" : `${c.websites} website${c.websites === 1 ? "" : "s"}`}</td>
       <td className="px-3 py-3 text-right">{c.launchedStudies}</td>
       <td className="px-3 py-3 text-right">{c.finishedAttempts}</td>
       <td className="px-3 py-3">{c.latestReportStatus ?? "—"}</td>

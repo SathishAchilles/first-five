@@ -10,7 +10,7 @@ import { AppError } from "../lib/errors";
 import { publicId } from "../lib/crypto";
 import { normalizeWebsiteUrl } from "../lib/url";
 import { assertClient } from "./admin-clients";
-import { assertCanCreateProject } from "./entitlements";
+import { assertCanCreateProject, getEntitlement } from "./entitlements";
 import { getOwnedStudy } from "./studies";
 import { requestAnalysis } from "./reports";
 
@@ -145,13 +145,20 @@ export async function extendStudy(ctx: AppContext, adminId: string, clientId: st
 
 /**
  * Adds a website to a client's account, for a builder who got stuck at setup.
- * The client's own website limit applies, and it is not counted as the client's
- * own conversion. The client still has to install the snippet to connect it.
+ * The client's own website limit applies; a client who hasn't got access yet
+ * (onboarded, code not redeemed) can have one website set up ahead of time and
+ * sees it once they redeem. It is not counted as the client's own conversion,
+ * and the client still has to install the snippet to connect it.
  */
 export async function addWebsite(ctx: AppContext, adminId: string, clientId: string, raw: unknown) {
   const input = AddWebsiteSchema.parse(raw);
   await assertClient(ctx, clientId);
-  await assertCanCreateProject(ctx.db, ctx.config, clientId);
+  const e = await getEntitlement(ctx.db, ctx.config, clientId);
+  if (e.status === "none") {
+    if (e.usage.projects >= 1) throw new AppError(403, "entitlement_limit", "Before they have access, a client can have 1 website set up for them.");
+  } else {
+    await assertCanCreateProject(ctx.db, ctx.config, clientId);
+  }
   const { url, origin } = normalizeWebsiteUrl(input.websiteUrl, { allowLocalhost: !ctx.config.isProduction });
   return withAudit(ctx, adminId, clientId, input.reason, async (tx) => {
     const project = await tx.project.create({

@@ -204,7 +204,7 @@ describe("add a website for a client", () => {
     expect(await h.db.conversionEvent.count({ where: { userId: id, name: "project_created" } })).toBe(0);
   });
 
-  it("keeps the client's website limit and needs a reason and access", async () => {
+  it("keeps the client's website limit and needs a reason", async () => {
     const b = await signupWithAccess(h);
     const id = await idOf(b.email);
     expect((await admin.post(`/api/admin/clients/${id}/websites`, { reason: " ", name: "A", websiteUrl: "https://a.example.com" })).statusCode).toBe(400);
@@ -212,8 +212,24 @@ describe("add a website for a client", () => {
     const second = await admin.post(`/api/admin/clients/${id}/websites`, { ...reason, name: "B", websiteUrl: "https://b.example.com" });
     expect(second.statusCode).toBe(403);
     expect(json(second).error.code).toBe("entitlement_limit");
-    const none = await signup(h.app);
-    expect((await admin.post(`/api/admin/clients/${await idOf(none.email)}/websites`, { ...reason, name: "C", websiteUrl: "https://c.example.com" })).statusCode).toBe(403);
     expect((await b.client.post(`/api/admin/clients/${id}/websites`, { ...reason, name: "D", websiteUrl: "https://d.example.com" })).statusCode).toBe(404);
+  });
+});
+
+describe("set up a website before the client has access", () => {
+  it("allows one website for a client without access, which they see after redeeming", async () => {
+    const none = await signup(h.app);
+    const id = await idOf(none.email);
+    const res = await admin.post(`/api/admin/clients/${id}/websites`, { ...reason, name: "Pre-setup", websiteUrl: "https://pre.example.com" });
+    expect(res.statusCode).toBe(201);
+    const second = await admin.post(`/api/admin/clients/${id}/websites`, { ...reason, name: "Another", websiteUrl: "https://another.example.com" });
+    expect(second.statusCode).toBe(403);
+    expect(json(second).error.code).toBe("entitlement_limit");
+    expect((await none.client.get("/api/projects")).statusCode).toBe(403);
+    const { generateCodes } = await import("../../apps/server/src/services/access-codes");
+    const { codes } = await generateCodes(h.ctx, { label: "t", audience: "internal", planKey: "complimentary", studyCredits: 1, participantCap: 5, count: 1, maxRedemptions: 1 });
+    expect((await none.client.post("/api/access/redeem", { code: codes[0] })).statusCode).toBe(200);
+    const own = json(await none.client.get("/api/projects"));
+    expect(own.projects.map((p: { id: string }) => p.id)).toContain(json(res).id);
   });
 });

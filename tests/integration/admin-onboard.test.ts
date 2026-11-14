@@ -84,3 +84,24 @@ describe("onboard a client with their invitation code", () => {
     expect((await admin.post(`/api/admin/clients/${clientId}/set-password-link`, reason)).statusCode).toBe(409);
   });
 });
+
+describe("onboard without a code", () => {
+  it("creates the account with no access; the client sets a password and redeems their own code", async () => {
+    const code = await newCode();
+    const res = await onboard({ email: "selfredeem@example.com", invitationCode: "" });
+    expect(res.statusCode).toBe(201);
+    const { clientId, setPasswordUrl } = json(res);
+    expect(await h.db.accessGrant.count({ where: { userId: clientId } })).toBe(0);
+    const row = json(await admin.get(`/api/admin/clients?q=selfredeem@example.com`)).clients[0];
+    expect(row).toMatchObject({ access: "none", pendingPasswordSetup: true });
+    const audits = await h.db.auditLog.findMany({ where: { action: "admin.client_onboarded", resourceId: clientId } });
+    expect(audits[0]!.metadata).toMatchObject({ after: { codeApplied: false } });
+
+    const c = new Client(h.app);
+    const set = await c.post("/api/auth/set-password", { token: tokenOf(setPasswordUrl), password: "their-own-password" });
+    expect(json(set).entitlement.status).toBe("none");
+    expect((await c.get("/api/projects")).statusCode).toBe(403);
+    expect((await c.post("/api/access/redeem", { code })).statusCode).toBe(200);
+    expect((await c.get("/api/projects")).statusCode).toBe(200);
+  });
+});

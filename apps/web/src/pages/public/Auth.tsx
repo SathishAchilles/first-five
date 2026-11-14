@@ -211,7 +211,8 @@ export function SetPasswordPage() {
     try {
       const res = await post<MeResponse>("/api/auth/set-password", { token, password });
       setMe(res);
-      navigate("/app", { replace: true });
+      // Clients onboarded without a code redeem the one they were given next.
+      navigate(res.entitlement.status === "none" ? "/redeem" : "/app", { replace: true });
     } catch (err) {
       setError(errorMessage(err));
       setFields(fieldErrors(err));

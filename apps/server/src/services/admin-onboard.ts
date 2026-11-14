@@ -1,7 +1,8 @@
 /**
- * Superadmin onboarding: creates a client account for someone who already has
- * an invitation code, redeems the code on it, and returns a one-time link for
- * the client to choose their own password. Until they do, nobody can log in.
+ * Superadmin onboarding: creates a client account and returns a one-time link
+ * for the client to choose their own password. Until they do, nobody can log in.
+ * With an invitation code, the code is redeemed on the account; without one,
+ * the client redeems the code themselves after setting their password.
  */
 import { EmailSchema, PasswordSchema } from "@firstfive/shared";
 import { z } from "zod";
@@ -20,7 +21,13 @@ export const OnboardClientSchema = ReasonSchema.extend({
   email: EmailSchema,
   name: z.string().trim().min(1, "Enter the client's name.").max(80),
   company: z.string().trim().max(80).optional(),
-  invitationCode: z.string().trim().min(8, "Enter the full invitation code.").max(64),
+  invitationCode: z
+    .string()
+    .trim()
+    .max(64)
+    .optional()
+    .transform((v) => v || undefined)
+    .pipe(z.string().min(8, "Enter the full invitation code.").optional()),
 });
 
 export const SetPasswordSchema = z.object({ token: z.string().min(16).max(200), password: PasswordSchema });
@@ -39,7 +46,7 @@ export async function onboardClient(ctx: AppContext, adminId: string, raw: unkno
   if (await ctx.db.user.findUnique({ where: { email: input.email } })) {
     throw new AppError(409, "email_taken", "An account with this email already exists.", { email: "Already has an account" });
   }
-  await checkCode(ctx, input.invitationCode);
+  if (input.invitationCode) await checkCode(ctx, input.invitationCode);
   const name = input.company ? `${input.name} · ${input.company}` : input.name;
   const user = await ctx.db.$transaction(async (tx) => {
     const u = await tx.user.create({ data: { email: input.email, name, passwordHash: UNSET_PASSWORD } });
@@ -49,16 +56,18 @@ export async function onboardClient(ctx: AppContext, adminId: string, raw: unkno
       action: "admin.client_onboarded",
       resourceType: "user",
       resourceId: u.id,
-      metadata: { clientId: u.id, reason: input.reason, before: null, after: { email: u.email, name } },
+      metadata: { clientId: u.id, reason: input.reason, before: null, after: { email: u.email, name, codeApplied: Boolean(input.invitationCode) } },
     });
     return u;
   });
-  try {
-    await redeemCode(ctx, user.id, input.invitationCode);
-  } catch (err) {
-    // Leave nothing behind if the code can't be applied.
-    await ctx.db.user.delete({ where: { id: user.id } });
-    throw err;
+  if (input.invitationCode) {
+    try {
+      await redeemCode(ctx, user.id, input.invitationCode);
+    } catch (err) {
+      // Leave nothing behind if the code can't be applied.
+      await ctx.db.user.delete({ where: { id: user.id } });
+      throw err;
+    }
   }
   return { clientId: user.id, ...(await issueLink(ctx, adminId, user.id)) };
 }

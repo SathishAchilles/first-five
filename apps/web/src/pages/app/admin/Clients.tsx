@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button, Card, EmptyState, ErrorState, Input, Pill, Select, Spinner } from "../../../components/ui";
 import { api, errorMessage } from "../../../lib/api";
-import { formatDate, timeAgo } from "../../../lib/format";
+import { formatDate } from "../../../lib/format";
 import { OnboardClientForm } from "./Onboard";
 
 export const FLAG_LABELS: Record<AdminClientFlag, string> = {
@@ -109,12 +109,8 @@ export function AdminClientsPage() {
                 <th className="px-3 py-3 text-right">
                   <button type="button" onClick={() => sortBy("attempts")}>Attempts{arrow("attempts")}</button>
                 </th>
-                <th className="px-3 py-3">Report</th>
                 <th className="px-3 py-3">
                   <button type="button" onClick={() => sortBy("signed_up")}>Signed up{arrow("signed_up")}</button>
-                </th>
-                <th className="px-3 py-3">
-                  <button type="button" onClick={() => sortBy("last_seen")}>Last seen{arrow("last_seen")}</button>
                 </th>
               </tr>
             </thead>
@@ -173,9 +169,7 @@ function ClientRow({ c }: { c: AdminClientRow }) {
       <td className="px-3 py-3 text-right whitespace-nowrap">{c.websites === 0 ? "—" : `${c.websites} website${c.websites === 1 ? "" : "s"}`}</td>
       <td className="px-3 py-3 text-right">{c.launchedStudies}</td>
       <td className="px-3 py-3 text-right">{c.finishedAttempts}</td>
-      <td className="px-3 py-3">{c.latestReportStatus ?? "—"}</td>
       <td className="px-3 py-3 whitespace-nowrap">{formatDate(c.createdAt)}</td>
-      <td className="px-3 py-3 whitespace-nowrap">{c.lastSeenAt ? timeAgo(c.lastSeenAt) : "Never"}</td>
     </tr>
   );
 }

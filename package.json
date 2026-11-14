@@ -16,6 +16,7 @@
     "dev:server": "npm run dev -w @firstfive/server",
     "dev:web": "npm run dev -w @firstfive/web",
     "build": "prisma generate && npm run build -w @firstfive/web && npm run build -w @firstfive/server",
+    "vercel-build": "prisma generate && prisma migrate deploy && npm run build -w @firstfive/web && npm run build -w @firstfive/server",
     "start": "prisma migrate deploy && node apps/server/dist/index.js",
     "start:no-migrate": "node apps/server/dist/index.js",
     "db:migrate": "prisma migrate deploy",
@@ -36,27 +37,28 @@
     "schema": "prisma/schema.prisma"
   },
   "dependencies": {
-    "zod": "^3.24.1",
-    "prisma": "^6.16.0",
-    "@prisma/client": "^6.16.0",
-    "fastify": "^5.2.0",
+    "@anthropic-ai/sdk": "^1.4.0",
     "@fastify/cookie": "^11.0.1",
+    "@fastify/cors": "^10.0.1",
+    "@fastify/helmet": "^13.0.1",
     "@fastify/rate-limit": "^10.2.1",
     "@fastify/static": "^8.0.3",
-    "@fastify/helmet": "^13.0.1",
-    "@fastify/cors": "^10.0.1",
+    "@google/genai": "^2.28.0",
+    "@prisma/client": "^6.16.0",
+    "@vercel/functions": "^3.11.3",
     "argon2": "^0.41.1",
-    "@anthropic-ai/sdk": "^1.4.0",
-    "@google/genai": "^2.28.0"
+    "fastify": "^5.2.0",
+    "prisma": "^6.16.0",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
-    "typescript": "~5.7.2",
-    "tsx": "^4.19.2",
-    "tsup": "^8.3.5",
-    "vitest": "^3.0.0",
+    "@playwright/test": "^1.49.1",
     "@types/node": "^22.10.0",
     "embedded-postgres": "^17.2.0-beta.15",
-    "@playwright/test": "^1.49.1"
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.2",
+    "vitest": "^3.0.0"
   },
   "allowScripts": {
     "@prisma/client@6.19.3": true,

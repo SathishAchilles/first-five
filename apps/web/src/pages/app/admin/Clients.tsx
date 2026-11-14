@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { Button, Card, EmptyState, ErrorState, Input, Pill, Select, Spinner } from "../../../components/ui";
 import { api, errorMessage } from "../../../lib/api";
 import { formatDate, timeAgo } from "../../../lib/format";
+import { OnboardClientForm } from "./Onboard";
 
 export const FLAG_LABELS: Record<AdminClientFlag, string> = {
   no_website: "No website",
@@ -45,6 +46,7 @@ export function AdminClientsPage() {
   const [sort, setSort] = useState<AdminClientSort>("last_seen");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
+  const [onboarding, setOnboarding] = useState(false);
   useEffect(() => setPage(1), [q, flags, access, sort, dir]);
 
   const params = new URLSearchParams({ sort, dir, page: String(page), pageSize: "50", access });
@@ -59,6 +61,9 @@ export function AdminClientsPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
+        <Button size="sm" onClick={() => setOnboarding(!onboarding)}>
+          Onboard client
+        </Button>
         <Input className="max-w-xs" placeholder="Search email or name" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search clients" />
         <Select className="w-auto" value={access} onChange={(e) => setAccess(e.target.value as typeof access)} aria-label="Access">
           <option value="any">Any access</option>
@@ -66,6 +71,7 @@ export function AdminClientsPage() {
           <option value="none">No access</option>
         </Select>
       </div>
+      {onboarding && <OnboardClientForm onClose={() => setOnboarding(false)} />}
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by flag">
         {SHOWN_FLAGS.map((f) => (
           <button
@@ -149,6 +155,7 @@ function ClientRow({ c }: { c: AdminClientRow }) {
         </Link>
         {c.name && <div className="text-xs text-ink-muted">{c.name}</div>}
         {c.waitlistJoinedAt && <div className="text-xs text-ink-muted">On waitlist since {formatDate(c.waitlistJoinedAt)}</div>}
+        {c.pendingPasswordSetup && <div className="text-xs text-ink-muted">Onboarded · hasn't set a password yet</div>}
         {shownFlags(c.flags).length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
             {shownFlags(c.flags).map((f) => (

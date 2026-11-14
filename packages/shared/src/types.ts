@@ -498,6 +498,8 @@ export interface AdminClientRow {
   finishedAttempts: number;
   latestReportStatus: string | null;
   waitlistJoinedAt: string | null;
+  /** Onboarded by a superadmin and hasn't chosen a password yet. */
+  pendingPasswordSetup: boolean;
   flags: AdminClientFlag[];
 }
 

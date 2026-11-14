@@ -7,6 +7,7 @@ import { AppError } from "../lib/errors";
 import { audit } from "../lib/audit";
 import { safeEqualHex, sha256 } from "../lib/crypto";
 import { checkCode, redeemCode } from "../services/access-codes";
+import { checkSetPasswordToken, setPasswordFromToken } from "../services/admin-onboard";
 import { createAuthSession, destroyAuthSession, login, SESSION_COOKIE, signup } from "../services/auth";
 import { getEntitlement } from "../services/entitlements";
 import { createCheckout, getOrderStatus, paidOffer } from "../services/payments";
@@ -72,6 +73,18 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext) {
       return me(user.id);
     },
   );
+
+  // One-time link for clients onboarded by a superadmin to choose their own password.
+  app.get("/api/auth/set-password", { config: { rateLimit: { max: 30, timeWindow: "15 minutes" } } }, async (req) =>
+    checkSetPasswordToken(ctx, z.object({ token: z.string().min(16).max(200) }).parse(req.query).token),
+  );
+
+  app.post("/api/auth/set-password", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (req, reply) => {
+    const user = await setPasswordFromToken(ctx, req.body);
+    const { token, expiresAt } = await createAuthSession(ctx, user.id, req.headers["user-agent"]);
+    setSessionCookie(reply, token, expiresAt);
+    return me(user.id);
+  });
 
   app.post("/api/auth/logout", async (req, reply) => {
     await destroyAuthSession(ctx, req.authToken);

@@ -10,6 +10,8 @@ export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** Holds the admin's own session token while they view the app as a client. */
 export const ADMIN_RETURN_COOKIE = "ff_admin_return";
 export const IMPERSONATION_TTL_MS = 30 * 60 * 1000;
+/** Stored instead of a password hash for a client onboarded by a superadmin, until they set one; never verifies. */
+export const UNSET_PASSWORD = "!unset";
 const TOUCH_INTERVAL_MS = 60 * 60 * 1000;
 
 // OWASP-recommended Argon2id parameters (19 MiB, 2 iterations, 1 lane).

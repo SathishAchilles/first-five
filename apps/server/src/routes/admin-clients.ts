@@ -4,6 +4,7 @@ import type { AppContext } from "../context";
 import { requireSuperadmin, userId } from "../http";
 import { audit } from "../lib/audit";
 import { assertClient, getClientDetail, listClients } from "../services/admin-clients";
+import { onboardClient, reissueSetPasswordLink } from "../services/admin-onboard";
 import * as support from "../services/admin-support";
 import * as dashboard from "../services/dashboard";
 import * as reports from "../services/reports";
@@ -80,6 +81,13 @@ export async function adminClientRoutes(app: FastifyInstance, ctx: AppContext) {
   app.post("/api/admin/clients/:id/grants", async (req, reply) => {
     const p = ClientParam.parse(req.params);
     return reply.status(201).send(await support.grantAccess(ctx, userId(req), p.id, req.body));
+  });
+
+  app.post("/api/admin/clients/onboard", async (req, reply) => reply.status(201).send(await onboardClient(ctx, userId(req), req.body)));
+
+  app.post("/api/admin/clients/:id/set-password-link", async (req) => {
+    const p = ClientParam.parse(req.params);
+    return reissueSetPasswordLink(ctx, userId(req), p.id, req.body);
   });
 
   app.post("/api/admin/clients/:id/websites", async (req, reply) => {

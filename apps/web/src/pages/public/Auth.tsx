@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Logo } from "../../components/layouts";
 import { Alert, Button, Card, Field, Input } from "../../components/ui";
-import { errorMessage, fieldErrors, post } from "../../lib/api";
+import { api, errorMessage, fieldErrors, post } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 
 function AuthShell({ title, subtitle, children, footer }: { title: string; subtitle?: ReactNode; children: ReactNode; footer: ReactNode }) {
@@ -174,6 +174,81 @@ export function SignupPage() {
           Create account
         </Button>
       </form>
+    </AuthShell>
+  );
+}
+
+/** One-time link for a client the First Five team onboarded: they choose their own password here. */
+export function SetPasswordPage() {
+  const { setMe } = useAuth();
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const token = params.get("token") ?? "";
+  const [email, setEmail] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(token ? null : "This link is missing its token. Ask the First Five team for a new one.");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    api<{ email: string }>(`/api/auth/set-password?token=${encodeURIComponent(token)}`)
+      .then((r) => setEmail(r.email))
+      .catch((err) => setLinkError(errorMessage(err)));
+  }, [token]);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setFields({});
+    if (password !== confirm) {
+      setFields({ confirm: "The passwords don't match" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await post<MeResponse>("/api/auth/set-password", { token, password });
+      setMe(res);
+      navigate("/app", { replace: true });
+    } catch (err) {
+      setError(errorMessage(err));
+      setFields(fieldErrors(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <AuthShell
+      title="Set your password"
+      subtitle={email ? <>Your First Five account for {email} is ready. Choose a password to sign in.</> : undefined}
+      footer={
+        <>
+          Already set it?{" "}
+          <Link to="/login" className="font-medium text-accent hover:underline">
+            Log in
+          </Link>
+        </>
+      }
+    >
+      {linkError ? (
+        <Alert tone="danger">{linkError}</Alert>
+      ) : (
+        <form onSubmit={submit} className="space-y-4" noValidate>
+          {error && <Alert tone="danger">{error}</Alert>}
+          <Field label="Password" hint="At least 10 characters" error={fields.password}>
+            {(p) => <Input {...p} type="password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} />}
+          </Field>
+          <Field label="Confirm password" error={fields.confirm}>
+            {(p) => <Input {...p} type="password" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />}
+          </Field>
+          <Button type="submit" className="w-full" loading={loading} disabled={!email}>
+            Set password and continue
+          </Button>
+        </form>
+      )}
     </AuthShell>
   );
 }

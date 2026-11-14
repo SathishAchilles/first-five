@@ -7,7 +7,7 @@ import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppConfig } from "./config";
-import type { AppContext } from "./context";
+import { runDetached, type AppContext } from "./context";
 import type { Db } from "./db";
 import { errorHandler } from "./http";
 import { createProviders, type Providers } from "./integrations/registry";
@@ -15,6 +15,7 @@ import { AppError } from "./lib/errors";
 import { adminRoutes } from "./routes/admin";
 import { adminClientRoutes } from "./routes/admin-clients";
 import { adminImpersonationRoutes } from "./routes/admin-impersonation";
+import { internalRoutes } from "./routes/internal";
 import { authRoutes } from "./routes/auth";
 import { growthRoutes } from "./routes/growth";
 import { projectRoutes } from "./routes/projects";
@@ -31,6 +32,8 @@ export interface BuildOptions {
   providers?: Providers;
   webDistDir?: string | null;
   logger?: boolean;
+  /** How to keep post-response work alive; serverless hosts pass `waitUntil`. */
+  defer?: (p: Promise<unknown>) => void;
 }
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -53,7 +56,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
     genReqId: () => crypto.randomUUID(),
   });
 
-  const ctx: AppContext = { config, db, providers: opts.providers ?? createProviders(config), log: app.log };
+  const ctx: AppContext = { config, db, providers: opts.providers ?? createProviders(config), log: app.log, defer: opts.defer ?? runDetached };
 
   app.setErrorHandler(errorHandler);
   await app.register(cookie);
@@ -155,6 +158,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
   await app.register(async (scoped) => adminRoutes(scoped, ctx));
   await app.register(async (scoped) => adminClientRoutes(scoped, ctx));
   await app.register(async (scoped) => adminImpersonationRoutes(scoped, ctx));
+  await app.register(async (scoped) => internalRoutes(scoped, ctx));
   await app.register(async (scoped) => {
     // Raw body is required for signature verification.
     scoped.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => done(null, body));

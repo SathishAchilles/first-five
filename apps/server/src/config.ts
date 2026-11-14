@@ -60,6 +60,14 @@ const EnvSchema = z.object({
   /** How long a cached PostHog dashboard snapshot is served before a background refresh. */
   ANALYTICS_SNAPSHOT_TTL_SECONDS: int(300),
   DISABLE_SCHEDULER: bool,
+  /** Bearer secret for the internal maintenance and analysis-continuation endpoints (Vercel cron sends it). */
+  CRON_SECRET: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.trim() !== "" ? v.trim() : undefined))
+    .pipe(z.string().min(32, "CRON_SECRET must be at least 32 characters").optional()),
+  /** Serverless only: hand an analysis run to a fresh invocation after this long. Unset ⇒ no limit. */
+  INVOCATION_SOFT_LIMIT_MS: z.coerce.number().int().positive().optional(),
 
   // PostHog Cloud.
   /** Ingestion host, e.g. https://us.i.posthog.com or https://eu.i.posthog.com */
@@ -130,7 +138,11 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   };
   // the Render env group names the PostHog project token POSTHOG_PROJECT_TOKEN
   if (!env.POSTHOG_PROJECT_API_KEY && source.POSTHOG_PROJECT_TOKEN) env.POSTHOG_PROJECT_API_KEY = source.POSTHOG_PROJECT_TOKEN;
-  const appUrl = (env.APP_URL ?? env.RENDER_EXTERNAL_URL ?? `http://localhost:${env.PORT}`).replace(/\/+$/, "");
+  // A Vercel preview serves from its branch URL; production keeps the configured APP_URL.
+  const isVercelPreview = source.VERCEL_ENV === "preview" && !!source.VERCEL_BRANCH_URL;
+  const appUrl = (
+    isVercelPreview ? `https://${source.VERCEL_BRANCH_URL}` : (env.APP_URL ?? env.RENDER_EXTERNAL_URL ?? `http://localhost:${env.PORT}`)
+  ).replace(/\/+$/, "");
   const appOrigin = new URL(appUrl).origin;
   const isProduction = env.NODE_ENV === "production";
   if (isProduction && !appUrl.startsWith("https://")) {
@@ -138,6 +150,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   }
   const trustedWebOrigins = [appOrigin];
   if (env.DEV_WEB_ORIGIN && !isProduction) trustedWebOrigins.push(new URL(env.DEV_WEB_ORIGIN).origin);
+  // The same preview is also reachable at its per-deployment URL.
+  if (isVercelPreview && source.VERCEL_URL) trustedWebOrigins.push(`https://${source.VERCEL_URL}`);
   return {
     ...env,
     appUrl,

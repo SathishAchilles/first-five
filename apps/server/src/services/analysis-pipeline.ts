@@ -134,9 +134,32 @@ export async function createAnalysisRun(ctx: AppContext, args: { reportId: strin
 export function kickRun(ctx: AppContext, runId: string) {
   if (driving.has(runId)) return;
   driving.add(runId);
-  void driveRun(ctx, runId)
-    .catch((err) => ctx.log.error({ err: (err as Error).message, runId }, "analysis run crashed"))
-    .finally(() => driving.delete(runId));
+  ctx.defer(
+    driveRun(ctx, runId)
+      .catch((err) => {
+        ctx.log.error({ err: (err as Error).message, runId }, "analysis run crashed");
+        return "stopped" as const;
+      })
+      .then((outcome) => {
+        driving.delete(runId);
+        // Hand the rest of the run to a fresh invocation once this one has let go of it.
+        if (outcome === "handoff") ctx.defer(continueRun(ctx, runId));
+      }),
+  );
+}
+
+/** Asks this app, in a new invocation, to keep driving the run. */
+async function continueRun(ctx: AppContext, runId: string) {
+  try {
+    const res = await fetch(`${ctx.config.appUrl}/api/internal/analysis/${runId}/continue`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${ctx.config.CRON_SECRET}` },
+    });
+    if (res.status !== 202) ctx.log.warn({ runId, status: res.status }, "analysis continuation was not accepted");
+    else ctx.log.info({ runId }, "analysis run continued in a new invocation");
+  } catch (err) {
+    ctx.log.warn({ runId, err: (err as Error).message }, "analysis continuation failed; the next report read or maintenance resumes it");
+  }
 }
 
 export async function failRun(ctx: AppContext, runId: string, error: string) {
@@ -158,23 +181,27 @@ async function runUsage(ctx: AppContext, runId: string): Promise<CallUsage> {
   return steps.reduce((sum, s) => (s.usage ? addUsage(sum, s.usage as unknown as CallUsage) : sum), emptyUsage());
 }
 
-async function driveRun(ctx: AppContext, runId: string) {
+async function driveRun(ctx: AppContext, runId: string): Promise<"stopped" | "handoff"> {
+  const invocationStart = Date.now();
+  const softLimit = ctx.config.INVOCATION_SOFT_LIMIT_MS;
   // Each iteration completes at least one step; the bound only guards against a logic error.
   for (let i = 0; i < 200; i++) {
+    // Serverless: stop between batches before the function's hard time limit and continue elsewhere.
+    if (i > 0 && softLimit && ctx.config.CRON_SECRET && Date.now() - invocationStart > softLimit) return "handoff";
     const run = await ctx.db.agentRun.findUnique({ where: { id: runId } });
-    if (!run || run.status !== "running") return;
+    if (!run || run.status !== "running") return "stopped";
     if (Date.now() - run.startedAt.getTime() > ctx.config.UX_DIRECTOR_RUN_BUDGET_MS) {
       await failRun(ctx, runId, budgetMessage(ctx));
-      return;
+      return "stopped";
     }
     const steps = await ctx.db.analysisStep.findMany({ where: { runId }, orderBy: { position: "asc" } });
     const failed = steps.find((s) => s.status === "failed");
     if (failed) {
       await failRun(ctx, runId, `The ${failed.kind} step failed: ${failed.error ?? "unknown error"}`);
-      return;
+      return "stopped";
     }
     const open = steps.filter((s) => s.status !== "done");
-    if (open.length === 0) return;
+    if (open.length === 0) return "stopped";
 
     const maps = open.filter((s) => s.kind === "map");
     let batch: AnalysisStep[];
@@ -187,8 +214,9 @@ async function driveRun(ctx: AppContext, runId: string) {
     }
     const claimed = await Promise.all(batch.map((s) => runStep(ctx, s)));
     // Everything runnable is leased by another worker; the sweep picks it up if that worker dies.
-    if (!claimed.some(Boolean)) return;
+    if (!claimed.some(Boolean)) return "stopped";
   }
+  return "stopped";
 }
 
 function budgetMessage(ctx: AppContext) {

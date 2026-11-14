@@ -7,6 +7,7 @@ import { Alert, Button, Card, CardHeader, ErrorState, Field, Input, KeyValue, Pi
 import { api, errorMessage, post } from "../../../lib/api";
 import { formatDate, formatDateTime, timeAgo } from "../../../lib/format";
 import { FlagPill, shownFlags } from "./Clients";
+import { SetPasswordLinkBox, type SetPasswordLink } from "./Onboard";
 
 type ActionKind = "grant" | "view" | "website";
 
@@ -32,6 +33,7 @@ export function AdminClientDetailPage() {
             {c.name ? `${c.name} · ` : ""}Signed up {formatDate(c.createdAt)} · Last seen {c.lastSeenAt ? timeAgo(c.lastSeenAt) : "never"}
             {c.waitlistJoinedAt && ` · On waitlist since ${formatDate(c.waitlistJoinedAt)}`}
           </p>
+          {c.pendingPasswordSetup && <PendingPasswordSetup clientId={c.id} />}
           {shownFlags(c.flags).length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
               {shownFlags(c.flags).map((f) => (
@@ -400,4 +402,48 @@ function ViewAsForm({ clientId, onCancel }: { clientId: string; onCancel: () => 
 
 function Panel({ children }: { children: ReactNode }) {
   return <div className="mt-3 rounded-lg border border-accent/40 bg-accent-soft/30 p-4">{children}</div>;
+}
+
+/** For an onboarded client who hasn't chosen a password: issue a fresh one-time link (older links stop working). */
+function PendingPasswordSetup({ clientId }: { clientId: string }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const m = useMutation({ mutationFn: () => post<SetPasswordLink>(`/api/admin/clients/${clientId}/set-password-link`, { reason }) });
+  return (
+    <div className="mt-2 space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Pill tone="warning" dot>
+          Hasn't set a password yet
+        </Pill>
+        {!m.data && (
+          <Button size="sm" variant="secondary" onClick={() => setOpen(!open)}>
+            New set-password link
+          </Button>
+        )}
+      </div>
+      {m.data ? (
+        <SetPasswordLinkBox link={m.data} />
+      ) : (
+        open && (
+          <Panel>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                m.mutate();
+              }}
+              className="space-y-3"
+            >
+              <Field label="Reason (required, recorded in the audit log)">
+                {(p) => <Textarea {...p} required maxLength={500} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />}
+              </Field>
+              {m.error && <Alert tone="danger">{errorMessage(m.error)}</Alert>}
+              <Button type="submit" size="sm" loading={m.isPending} disabled={!reason.trim()}>
+                Create link
+              </Button>
+            </form>
+          </Panel>
+        )
+      )}
+    </div>
+  );
 }

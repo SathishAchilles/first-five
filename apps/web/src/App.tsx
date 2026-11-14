@@ -25,7 +25,7 @@ import { WebsitesPage } from "./pages/app/Websites";
 import { FeedbackPage } from "./pages/participant/Feedback";
 import { StudyWelcomePage } from "./pages/participant/StudyWelcome";
 import { LandingPage } from "./pages/public/Landing";
-import { LoginPage, SignupPage } from "./pages/public/Auth";
+import { LoginPage, SetPasswordPage, SignupPage } from "./pages/public/Auth";
 import { AccessPage, CheckoutPage, PaymentStatusPage, PrivacyPage, RedeemPage, TermsPage, WaitlistPage, WaitlistSuccessPage } from "./pages/public/Funnel";
 import { NotFoundPage } from "./pages/public/NotFound";
 import { PublishedReportPage } from "./pages/public/PublishedReport";
@@ -62,6 +62,7 @@ export function App() {
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
+      <Route path="/set-password" element={<SetPasswordPage />} />
       <Route path="/t/:studyId" element={<StudyWelcomePage />} />
       <Route path="/t/:studyId/feedback" element={<FeedbackPage />} />
       <Route path="/r/:token" element={<PublishedReportPage />} />

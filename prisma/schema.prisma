@@ -38,8 +38,24 @@ model User {
   approvals     ReportApproval[]
   setupSessions SetupSession[]
   auditLogs     AuditLog[]
+  passwordSetupTokens PasswordSetupToken[]
 
   @@map("users")
+}
+
+/// One-time link for a client onboarded by a superadmin to choose their own password.
+model PasswordSetupToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  createdById String?   @db.Uuid
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@map("password_setup_tokens")
 }
 
 model AuthSession {

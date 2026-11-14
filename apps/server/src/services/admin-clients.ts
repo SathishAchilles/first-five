@@ -7,6 +7,7 @@ import type { AdminClientDetail, AdminClientFlag, AdminClientListQuery, AdminCli
 import type { AppConfig } from "../config";
 import type { AppContext } from "../context";
 import { AppError } from "../lib/errors";
+import { UNSET_PASSWORD } from "./auth";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -123,6 +124,7 @@ async function loadRows(ctx: AppContext, now: Date, onlyUserId?: string): Promis
       finishedAttempts: studies.reduce((n, s) => n + s.finishedAttempts, 0),
       latestReportStatus: latest?.status ?? null,
       waitlistJoinedAt: waitlistByEmail.get(u.email.toLowerCase())?.toISOString() ?? null,
+      pendingPasswordSetup: u.passwordHash === UNSET_PASSWORD,
       flags: computeFlags(
         { createdAt: u.createdAt, hasActiveGrant: active.length > 0, pendingPayments, websites: u.projects, studies },
         now,

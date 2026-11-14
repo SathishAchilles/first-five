@@ -149,7 +149,7 @@ export async function startPostgres(port: number, fresh: boolean) {
   await pg.start();
   if (fresh) await pg.createDatabase("firstfive_local");
   const url = `postgresql://firstfive:firstfive@localhost:${port}/firstfive_local`;
-  if (fresh) execSync("npx prisma migrate deploy", { env: { ...process.env, DATABASE_URL: url }, stdio: "pipe" });
+  if (fresh) execSync("npx prisma migrate deploy", { env: { ...process.env, DATABASE_URL: url, DIRECT_URL: url }, stdio: "pipe" });
   return { pg, url };
 }
 

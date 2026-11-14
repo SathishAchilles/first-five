@@ -33,6 +33,11 @@ services:
         fromDatabase:
           name: first-five-db
           property: connectionString
+      # Prisma's directUrl (migrations); on Render it is the same database.
+      - key: DIRECT_URL
+        fromDatabase:
+          name: first-five-db
+          property: connectionString
       - key: SESSION_SECRET
         generateValue: true
       - key: PAID_STUDY_PRICE_MINOR

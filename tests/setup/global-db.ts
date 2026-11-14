@@ -24,7 +24,7 @@ export default async function setup(project: TestProject) {
     await pg.createDatabase("firstfive_test");
     url = `postgresql://firstfive:firstfive@localhost:${port}/firstfive_test`;
   }
-  execSync("npx prisma migrate deploy", { env: { ...process.env, DATABASE_URL: url }, stdio: "pipe" });
+  execSync("npx prisma migrate deploy", { env: { ...process.env, DATABASE_URL: url, DIRECT_URL: url }, stdio: "pipe" });
   project.provide("databaseUrl", url);
   return async () => {
     await pg?.stop();

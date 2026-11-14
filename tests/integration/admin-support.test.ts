@@ -186,3 +186,34 @@ describe("re-run a UX Director report", () => {
     expect(await h.db.auditLog.count({ where: { action: "admin.report_rerun", resourceId: json(first).id } })).toBe(1);
   });
 });
+
+describe("add a website for a client", () => {
+  it("creates the website on the client's account, audited, and the client sees it", async () => {
+    const b = await signupWithAccess(h);
+    const id = await idOf(b.email);
+    const res = await admin.post(`/api/admin/clients/${id}/websites`, { ...reason, name: "Clinic site", websiteUrl: "https://clinic.example.com/" });
+    expect(res.statusCode).toBe(201);
+    const project = await h.db.project.findUniqueOrThrow({ where: { id: json(res).id } });
+    expect(project.ownerId).toBe(id);
+    expect(project.canonicalOrigin).toBe("https://clinic.example.com");
+    const own = json(await b.client.get("/api/projects"));
+    expect(own.projects.map((p: { id: string }) => p.id)).toContain(project.id);
+    const rows = await h.db.auditLog.findMany({ where: { action: "admin.website_added", resourceId: project.id } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.metadata).toMatchObject({ clientId: id, reason: reason.reason, before: null, after: { name: "Clinic site", origin: "https://clinic.example.com" } });
+    expect(await h.db.conversionEvent.count({ where: { userId: id, name: "project_created" } })).toBe(0);
+  });
+
+  it("keeps the client's website limit and needs a reason and access", async () => {
+    const b = await signupWithAccess(h);
+    const id = await idOf(b.email);
+    expect((await admin.post(`/api/admin/clients/${id}/websites`, { reason: " ", name: "A", websiteUrl: "https://a.example.com" })).statusCode).toBe(400);
+    expect((await admin.post(`/api/admin/clients/${id}/websites`, { ...reason, name: "A", websiteUrl: "https://a.example.com" })).statusCode).toBe(201);
+    const second = await admin.post(`/api/admin/clients/${id}/websites`, { ...reason, name: "B", websiteUrl: "https://b.example.com" });
+    expect(second.statusCode).toBe(403);
+    expect(json(second).error.code).toBe("entitlement_limit");
+    const none = await signup(h.app);
+    expect((await admin.post(`/api/admin/clients/${await idOf(none.email)}/websites`, { ...reason, name: "C", websiteUrl: "https://c.example.com" })).statusCode).toBe(403);
+    expect((await b.client.post(`/api/admin/clients/${id}/websites`, { ...reason, name: "D", websiteUrl: "https://d.example.com" })).statusCode).toBe(404);
+  });
+});

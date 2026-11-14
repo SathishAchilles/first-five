@@ -7,7 +7,10 @@ import { z } from "zod";
 import type { AppContext } from "../context";
 import { audit } from "../lib/audit";
 import { AppError } from "../lib/errors";
+import { publicId } from "../lib/crypto";
+import { normalizeWebsiteUrl } from "../lib/url";
 import { assertClient } from "./admin-clients";
+import { assertCanCreateProject } from "./entitlements";
 import { getOwnedStudy } from "./studies";
 import { requestAnalysis } from "./reports";
 
@@ -28,6 +31,10 @@ export const GrantAccessSchema = ReasonSchema.extend({
 });
 export const AddCreditsSchema = ReasonSchema.extend({ credits: z.coerce.number().int().min(1).max(50) });
 export const ExtendStudySchema = ReasonSchema.extend({ expiresAt: futureDate });
+export const AddWebsiteSchema = ReasonSchema.extend({
+  name: z.string().trim().min(1, "Give the website a name.").max(80),
+  websiteUrl: z.string().trim().min(1, "Enter the website address.").max(2048),
+});
 
 interface Change {
   action: string;
@@ -133,6 +140,41 @@ export async function extendStudy(ctx: AppContext, adminId: string, clientId: st
     });
     const view = (s: { status: string; expiresAt: Date | null }) => ({ status: s.status, expiresAt: s.expiresAt?.toISOString() ?? null });
     return { change: { action: "admin.study_extended", resourceType: "study", resourceId: study.id, before: view(study), after: view(after) }, result: { id: study.id } };
+  });
+}
+
+/**
+ * Adds a website to a client's account, for a builder who got stuck at setup.
+ * The client's own website limit applies, and it is not counted as the client's
+ * own conversion. The client still has to install the snippet to connect it.
+ */
+export async function addWebsite(ctx: AppContext, adminId: string, clientId: string, raw: unknown) {
+  const input = AddWebsiteSchema.parse(raw);
+  await assertClient(ctx, clientId);
+  await assertCanCreateProject(ctx.db, ctx.config, clientId);
+  const { url, origin } = normalizeWebsiteUrl(input.websiteUrl, { allowLocalhost: !ctx.config.isProduction });
+  return withAudit(ctx, adminId, clientId, input.reason, async (tx) => {
+    const project = await tx.project.create({
+      data: {
+        ownerId: clientId,
+        publicId: publicId("ffp"),
+        name: input.name,
+        websiteUrl: url,
+        canonicalOrigin: origin,
+        origins: { create: { origin } },
+        sdkConfig: { create: {} },
+      },
+    });
+    return {
+      change: {
+        action: "admin.website_added",
+        resourceType: "project",
+        resourceId: project.id,
+        before: null,
+        after: { publicId: project.publicId, name: project.name, websiteUrl: url, origin },
+      },
+      result: { id: project.id, publicId: project.publicId },
+    };
   });
 }
 

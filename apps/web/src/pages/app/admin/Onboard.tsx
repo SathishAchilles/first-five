@@ -33,7 +33,8 @@ export function OnboardClientForm({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({ name: "", company: "", email: "", invitationCode: "", reason: "" });
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
   const m = useMutation({
-    mutationFn: () => post<SetPasswordLink & { clientId: string }>("/api/admin/clients/onboard", { ...form, company: form.company || undefined }),
+    mutationFn: () =>
+      post<SetPasswordLink & { clientId: string }>("/api/admin/clients/onboard", { ...form, company: form.company || undefined, invitationCode: form.invitationCode || undefined }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-clients"] }),
   });
   const fields = m.error ? fieldErrors(m.error) : {};
@@ -52,8 +53,10 @@ export function OnboardClientForm({ onClose }: { onClose: () => void }) {
         </div>
       ) : (
         <form onSubmit={submit} className="space-y-3">
-          <h3 className="font-medium">Onboard a client with their invitation code</h3>
-          <p className="text-sm text-ink-muted">Creates their account and applies the code. They choose their own password from the link you send them.</p>
+          <h3 className="font-medium">Onboard a client</h3>
+          <p className="text-sm text-ink-muted">
+            Creates their account. They choose their own password from the link you send them. Leave the code empty to let them redeem it themselves after setting their password.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Name" error={fields.name}>
               {(p) => <Input {...p} required value={form.name} onChange={set("name")} />}
@@ -64,8 +67,8 @@ export function OnboardClientForm({ onClose }: { onClose: () => void }) {
             <Field label="Email" error={fields.email}>
               {(p) => <Input {...p} type="email" required value={form.email} onChange={set("email")} />}
             </Field>
-            <Field label="Invitation code they were given" error={fields.invitationCode ?? fields.code}>
-              {(p) => <Input {...p} required className="font-mono" value={form.invitationCode} onChange={set("invitationCode")} />}
+            <Field label="Invitation code to apply now" optional hint="Empty: they redeem it themselves" error={fields.invitationCode ?? fields.code}>
+              {(p) => <Input {...p} className="font-mono" value={form.invitationCode} onChange={set("invitationCode")} />}
             </Field>
           </div>
           <Field label="Reason (required, recorded in the audit log)" error={fields.reason}>

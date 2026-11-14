@@ -11,3 +11,6 @@ test-results/
 .DS_Store
 qa/screenshots/*.tmp.png
 .claude/
+
+# Vercel CLI local state
+.vercel/

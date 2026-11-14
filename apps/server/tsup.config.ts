@@ -3,6 +3,7 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: {
     index: "src/index.ts",
+    vercel: "src/vercel.ts",
     "cli/generate-codes": "src/cli/generate-codes.ts",
     "cli/grant-superadmin": "src/cli/grant-superadmin.ts",
     "cli/sweep": "src/cli/sweep.ts",

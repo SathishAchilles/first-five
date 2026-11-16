@@ -1,6 +1,6 @@
 # Deploying First Five on Vercel
 
-First Five runs on Vercel (team `curious-minds3`, Hobby plan) with its data in its own hosted Supabase project, `first-five` (ap-southeast-1). That project is dedicated to First Five: no other app or system uses it, and First Five uses no other database. This replaces Render (see `RENDER.md`, kept for rollback).
+First Five runs on Vercel (team `curious-minds3`, Pro plan) with its data in its own hosted Supabase project, `first-five` (ap-southeast-1). That project is dedicated to First Five: no other app or system uses it, and First Five uses no other database. This replaces Render (see `RENDER.md`, kept for rollback).
 
 ## How it runs
 
@@ -10,7 +10,7 @@ First Five runs on Vercel (team `curious-minds3`, Hobby plan) with its data in i
 | API (Fastify) | One Vercel Function, `api/index.mjs` → `apps/server/dist/vercel.js` | Region `sin1`, Node 22.x, `maxDuration` 300 s |
 | `/healthz`, `/readyz` | Same function | Same paths as before |
 | Database | Supabase schema `first_five` (production), `first_five_preview` (previews) | Prisma reaches it through the Supavisor pooler |
-| Maintenance | Vercel cron, daily at 21:30 UTC (03:00 IST) → `GET /api/internal/maintenance` | Hobby allows one run a day |
+| Maintenance | Vercel cron, daily at 21:30 UTC (03:00 IST) → `GET /api/internal/maintenance` | Daily by design; Pro would allow more often |
 
 Work a request starts but doesn't await (analytics outbox delivery, analytics snapshot refresh, UX Director analysis) is handed to Vercel's `waitUntil` through `ctx.defer`, so it isn't frozen when the response is sent.
 
@@ -90,4 +90,3 @@ Same day only: resume the Render web service. Its database is never written by t
 - **Snippets change host.** The public host moves from `*.onrender.com` to `<APP_DOMAIN>`; builders with installed snippets must copy the new one.
 - **Rate limits are per instance** (in memory). Add Vercel WAF rate-limit rules for `/api/auth/*`, `/api/access-codes/*` and `/api/sdk/exchange`.
 - **Previews are behind Vercel Deployment Protection.** SDK tests from external sites need a bypass token; production on the custom domain is public.
-- **Hobby is for non-commercial use.** First Five sells studies; revisit the plan before turning payments on.

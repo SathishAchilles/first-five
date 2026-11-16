@@ -1,13 +1,13 @@
 # Deploying First Five on Vercel
 
-First Five runs on Vercel (team `curious-minds3`, Pro plan) with its data in its own hosted Supabase project, `first-five` (ap-southeast-1). That project is dedicated to First Five: no other app or system uses it, and First Five uses no other database. This replaces Render (see `RENDER.md`, kept for rollback).
+First Five runs on Vercel (team `curious-minds3`, Pro plan) with its data in its own hosted Supabase project, `first-five` (ref `ucwjatmkfkfjindhbxnr`, ap-south-1 Mumbai). That project is dedicated to First Five: no other app or system uses it, and First Five uses no other database. This replaces Render (see `RENDER.md`, kept for rollback).
 
 ## How it runs
 
 | Piece | Where | Notes |
 |---|---|---|
 | Web app (React SPA) | Vercel CDN, from `apps/web/dist` | Every non-API route falls back to `index.html` |
-| API (Fastify) | One Vercel Function, `api/index.mjs` → `apps/server/dist/vercel.js` | Region `sin1`, Node 22.x, `maxDuration` 300 s |
+| API (Fastify) | One Vercel Function, `api/index.mjs` → `apps/server/dist/vercel.js` | Region `bom1` (Mumbai, next to the database), Node 22.x, `maxDuration` 300 s |
 | `/healthz`, `/readyz` | Same function | Same paths as before |
 | Database | Supabase schema `first_five` (production), `first_five_preview` (previews) | Prisma reaches it through the Supavisor pooler |
 | Maintenance | Vercel cron, daily at 21:30 UTC (03:00 IST) → `GET /api/internal/maintenance` | Daily by design; Pro would allow more often |

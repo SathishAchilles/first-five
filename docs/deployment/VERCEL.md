@@ -71,10 +71,13 @@ Run the cron by hand: `vercel crons run /api/internal/maintenance`, or `curl -H 
 
 The production dataset is copied directly from Render Postgres into Supabase schema `first_five` in one streamed, single-transaction `pg_dump | psql` run (`scripts/db-copy/`). Nothing is staged on disk; any failure rolls back the whole copy and Render is only read.
 
+The copy needs `pg_dump`/`psql` 17 (`brew install libpq`; the script uses `/opt/homebrew/opt/libpq/bin` unless `PG_BIN` says otherwise). No Docker.
+
 1. Open the Render DB `ipAllowList` to the operator's IP and set `SRC` (Render external URL, `sslmode=require`) and `DST` (Supabase session pooler 5432).
-2. Pre-flight: the schema-only dump has no `CREATE SCHEMA/EXTENSION/FUNCTION`; Supabase `public` has no tables or enum types.
-3. Rehearse with `scripts/db-copy/copy-render-to-supabase.sh`, compare the row counts it prints, then `DROP SCHEMA first_five CASCADE`.
-4. Cutover: suspend the Render web service, run the copy again, check counts, `prisma migrate deploy` with the production `DIRECT_URL`, promote the production deployment, attach the domain and smoke-test.
+2. Pre-flight, with Render live: the schema-only dump has no `CREATE SCHEMA/EXTENSION/FUNCTION`; Supabase `public` has no tables or enum types.
+3. Cutover: suspend the Render web service, run `scripts/db-copy/copy-render-to-supabase.sh` once, check the row counts it prints, `prisma migrate deploy` with the production `DIRECT_URL`, promote the production deployment, attach the domain and smoke-test.
+
+There is no rehearsal copy. If the copy fails, its transaction rolls back and Supabase is unchanged: resume Render, fix, and try again. A second run into an existing `first_five` stops at `CREATE SCHEMA` instead of merging.
 
 The tables land in `first_five` with row level security on and no policies, so Supabase's public data API returns nothing for them; Prisma connects as the owner and isn't affected.
 

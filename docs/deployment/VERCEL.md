@@ -1,6 +1,6 @@
 # Deploying First Five on Vercel
 
-First Five runs on Vercel (team `curious-minds3`, Hobby plan) with its data in the shared hosted Supabase project (`jyefwcjbsmekmdubykyo`, ap-southeast-1). This replaces Render (see `RENDER.md`, kept for rollback).
+First Five runs on Vercel (team `curious-minds3`, Hobby plan) with its data in its own hosted Supabase project, `first-five` (ap-southeast-1). That project is dedicated to First Five: no other app or system uses it, and First Five uses no other database. This replaces Render (see `RENDER.md`, kept for rollback).
 
 ## How it runs
 
@@ -79,7 +79,7 @@ The copy needs `pg_dump`/`psql` 17 (`brew install libpq`; the script uses `/opt/
 
 There is no rehearsal copy. If the copy fails, its transaction rolls back and Supabase is unchanged: resume Render, fix, and try again. A second run into an existing `first_five` stops at `CREATE SCHEMA` instead of merging.
 
-The tables land in `first_five` with row level security on and no policies, so Supabase's public data API returns nothing for them; Prisma connects as the owner and isn't affected.
+The tables land in `first_five` with row level security on and no policies, so the project's public data API returns nothing for them; Prisma connects as the owner and isn't affected.
 
 ## Rollback
 
